@@ -37,7 +37,18 @@ CREATE TABLE wallet_total (
 To run:
 
 ```bash
-TREASURY_PRIVATE_KEY=<private_key> DATABASE_URL='postgresql://<psql_user>>:<psql_password>@<psql_hostname>:5432/<psql_db>' bun run index.ts
+TREASURY_PRIVATE_KEY=<private_key> DATABASE_URL='postgresql://<psql_user>:<psql_password>@<psql_hostname>:5432/<psql_db>' bun run index.ts
+```
+
+## Docker Compose
+create .env file
+
+```
+TREASURY_PRIVATE_KEY=<private key>
+POSTGRES_USER=<db-user>
+POSTGRES_PASSWORD=<db-passwd>
+POSTGRES_DB=<db-name>
+DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@kaspool-db:5432/${POSTGRES_DB}"
 ```
 
 ## Additonal notes

@@ -2,7 +2,7 @@ version: '0.1'
 services:
   postgres:
     image: postgres
-    container_name: my_postgres
+    container_name: kaspool-db
 #    ports:
 #      - "5432:5432"
     networks:
@@ -44,7 +44,7 @@ services:
 
   prometheus:
     image: prom/prometheus
-    container_name: prometheus
+    container_name: kaspool-prmths
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:

@@ -1,15 +1,18 @@
 {
-  "node": "",
+  "node": "wss://us-1.kaspa-ng.org/testnet-11",
+  "network" : "testnet-11",
+  "pool_id" : "us01-nachopool1",
+  "location" : "us-central",
+  "hostname" : "us01-nachopool1.nachowyborski.xyz",  
   "stratum": {
     "port": 7777,
     "templates": {
       "cacheSize": 300
     },
-    "difficulty": 1
+    "difficulty": 2
 
   },
   "treasury": {
-    "privateKey": "",
-    "fee": 1
+    "fee": 5
   }
 }

@@ -26,7 +26,7 @@ export default class Server {
     this.onMessage = onMessage
 
     this.socket = Bun.listen({
-      hostname: "localhost",
+      hostname: "0.0.0.0",
       port: port,
       socket: {
         open: this.onConnect.bind(this),

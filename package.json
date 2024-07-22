@@ -10,6 +10,9 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "lmdb": "^3.0.11"
+    "dotenv": "^16.4.5",
+    "lmdb": "^3.0.11",
+    "pg": "^8.12.0",
+    "prom-client": "^15.1.3"
   }
 }

@@ -12,6 +12,9 @@ In the Stratum app for a Kaspa mining pool, several components work together to 
 
 5. **Works and Maps**: These are used to track the progress of each miner. The `works` map keeps track of the current difficulty and shares submitted by each miner.
 
+## Download Kaspa WASM
+You can download the latest form here: https://kaspa.aspectron.org/nightly/downloads/ move nodejs to the repo folder as wasm
+
 ## How to install
 To install dependencies:
 

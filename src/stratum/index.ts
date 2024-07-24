@@ -29,13 +29,21 @@ export default class Stratum extends EventEmitter {
   private difficulty: number;
   private contributions: Map<bigint, Contribution> = new Map();
   private subscriptors: Set<Socket<Miner>> = new Set();
+  private minerHashRateGauge: Gauge<string>;
+  private poolHashRateGauge: Gauge<string>;
+  private poolAddress: string;
   miners: Map<string, { sockets: Set<Socket<Miner>>, shares: number, hashRate: number, lastShareTime: number, difficulty: number }> = new Map();
 
-  constructor(templates: Templates, port: number, initialDifficulty: number) {
+
+
+  constructor(templates: Templates, port: number, initialDifficulty: number, minerHashRateGauge: Gauge<string>, poolHashRateGauge: Gauge<string>, poolAddress: string) {
     super();
     this.server = new Server(port, initialDifficulty, this.onMessage.bind(this));
     this.difficulty = initialDifficulty;
     this.templates = templates;
+    this.minerHashRateGauge = minerHashRateGauge;
+    this.poolHashRateGauge = poolHashRateGauge;
+    this.poolAddress = poolAddress;        
     this.templates.register((id, hash, timestamp) => this.announceTemplate(id, hash, timestamp));
     this.startHashRateLogging(60000);
   }
@@ -47,6 +55,7 @@ export default class Stratum extends EventEmitter {
   }
 
   async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint) {
+    sharesGauge.labels(address).inc();
     const timestamp = Date.now();
     if (this.contributions.has(nonce)) throw Error('Duplicate share');
     const state = this.templates.getPoW(hash);
@@ -61,27 +70,46 @@ export default class Stratum extends EventEmitter {
     minerData.lastShareTime = timestamp;
     minerData.difficulty = difficulty;
     this.miners.set(address, minerData);
-    sharesGauge.labels(address).inc();
   }
 
   resetHashRates() {
+    let totalHashRate = 0;
+
     this.miners.forEach((minerData, address) => {
       const timeDifference = Date.now() - minerData.lastShareTime;
       if (timeDifference > 0) {
-        const hashRate = (minerData.shares * minerData.difficulty * 1e3) / timeDifference;
+        const hashRate = (minerData.shares * minerData.difficulty * 1e3) / (timeDifference / 1000); // calculate in hashes per second
         minerData.hashRate = hashRate;
-        minerData.shares = 0;
-        minerData.lastShareTime = Date.now();
+        console.log(`Stratum: the accumulated hash rate for ${address} is: `, hashRate);
+
+        // Update the Prometheus gauge for each miner using address (wallet) and name (miner ID)
+        minerData.sockets.forEach(socket => {
+          socket.data.workers.forEach((worker, workerName) => {
+            this.minerHashRateGauge.labels(workerName, worker.address).set(hashRate);
+          });
+        });
       }
+
+      totalHashRate += minerData.hashRate;
+
+      minerData.shares = 0;
+      minerData.lastShareTime = Date.now();
     });
+
+    console.log("Stratum: the accumulated overall pool hash rate is: ", totalHashRate);
+
+    // Update the pool hash rate gauge
+    this.poolHashRateGauge.labels(this.poolAddress).set(totalHashRate);
   }
 
+  
+  
   startHashRateLogging(interval: number) {
     setInterval(() => {
       this.resetHashRates();
     }, interval);
   }
-
+  
   getOverallHashRate() {
     let totalHashRate = 0;
     for (const miner of this.miners.values()) {
@@ -89,11 +117,12 @@ export default class Stratum extends EventEmitter {
     }
     return totalHashRate;
   }
-
+  
   getMinerHashRate(address: string) {
     const minerData = this.miners.get(address);
     return minerData ? minerData.hashRate : 0;
   }
+  
 
   announceTemplate(id: string, hash: string, timestamp: bigint) {
     const tasksData: { [key in Encoding]?: string } = {};

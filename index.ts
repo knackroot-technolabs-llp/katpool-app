@@ -51,34 +51,21 @@ const poolHashRateGauge = new Gauge({
 });
 
 // Create a function to push all metrics under a single job name
-async function pushMetrics(miners: Map<string, any>, overallHashRate: number, pool_address: string) {
-  miners.forEach((minerData, address) => {
-    minerData.sockets.forEach((socket: any) => {
-      socket.data.workers.forEach((worker: any, workerName: string) => {
-        minerHashRateGauge.labels(workerName, worker.address).set(minerData.hashRate);
-      });
-    });
-  });
-
-  if (miners.size === 0) {
-    poolHashRateGauge.labels(pool_address).set(0);
-  } else {
-    poolHashRateGauge.labels(pool_address).set(overallHashRate);
-  }
-
+async function pushMetrics() {
   // Push all metrics to the Pushgateway under the same job name
   try {
     await gateway.pushAdd({ jobName: 'mining_metrics' });
+    console.log('Metrics pushed to Pushgateway');
   } catch (err) {
     console.error('ERROR: Error pushing metrics to Pushgateway:', err);
   }
 }
 
-const stratum = new Stratum(templates, config.stratum.port, config.stratum.difficulty);
+const stratum = new Stratum(templates, config.stratum.port, config.stratum.difficulty, minerHashRateGauge, poolHashRateGauge, treasury.address);
 const pool = new Pool(treasury, stratum);
 
-// Call pushMetrics periodically, for example every 60 seconds
+// Schedule metrics push every minute
 setInterval(() => {
-  const overallHashRate = stratum.getOverallHashRate();
-  pushMetrics(stratum.miners, overallHashRate, treasury.address);
-}, 60000);
+  stratum.resetHashRates();
+  pushMetrics();
+}, 60000); // every minute

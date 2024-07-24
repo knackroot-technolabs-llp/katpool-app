@@ -2,6 +2,7 @@ import type Treasury from '../treasury';
 import type Stratum from '../stratum';
 import Database from './database';
 import Monitoring from './monitoring';
+import { schedule } from 'node-cron';
 import { sompiToKaspaStringWithSuffix, type IPaymentOutput } from '../../wasm/kaspa';
 
 export default class Pool {
@@ -28,6 +29,12 @@ export default class Pool {
     this.treasury.on('revenue', (amount: bigint) => this.revenuize(amount));
 
     this.monitoring.log(`Pool: Pool is active on port ${this.stratum.server.socket.port}.`);
+    // Schedule the distribute function to run at 12 PM and 12 AM
+    //schedule('0 0,12 * * *', async () => {
+    schedule('0 * * * *', async () => {      
+      await this.distribute();
+    });
+
   }
 
   private async revenuize(amount: bigint) {
@@ -38,38 +45,19 @@ export default class Pool {
   }
   
 
-  private async distribute(amount: bigint) {
-    let works = new Map<string, { minerId: string, difficulty: number }>();
-    let totalWork = 0;
-  
-    for (const contribution of this.stratum.dumpContributions()) {
-      const { address, difficulty, minerId } = contribution;
-      const currentWork = works.get(address) ?? { minerId, difficulty: 0 };
-  
-      works.set(address, { minerId, difficulty: currentWork.difficulty + difficulty });
-      totalWork += difficulty;
-    }
-  
-    this.monitoring.log(`Pool: Reward with ${sompiToKaspaStringWithSuffix(amount, this.treasury.processor.networkId!)} is getting distributed into ${works.size} miners.`);
-  
-    const scaledTotal = BigInt(totalWork * 100);
+  private async distribute() {
+
+    this.monitoring.log(`Pool: Starting distribution of rewards`);
+    const balances = await this.database.getAllBalances();
     let payments: IPaymentOutput[] = [];
   
-    for (const [address, work] of works) {
-      const scaledWork = BigInt(work.difficulty * 100);
-      const share = (scaledWork * amount) / scaledTotal;
-  
-      const user = await this.database.getUser(work.minerId, address);
-  
-      if (user.balance + share >= BigInt(1e8)) {
-        await this.database.resetBalance(work.minerId, address);
-  
+    for (const { minerId, address, balance } of balances) {
+      this.monitoring.log(`Pool: payment ${balance} for ${minerId} to wallet ${address}`);
+      if (balance >= BigInt(1e8)) {
         payments.push({
           address,
-          amount: user.balance + share
+          amount: balance
         });
-      } else {
-        await this.database.addBalance(work.minerId, address, share);
       }
     }
   
@@ -77,9 +65,18 @@ export default class Pool {
       return this.monitoring.log(`Pool: No payments found for current distribution cycle.`);
     }
   
-    const hash = await this.treasury.send(payments);
-    this.monitoring.log(`Pool: Reward threshold exceeded by miner(s), individual rewards sent: ${hash}.`);
+    for (const payment of payments) {
+      const hash = await this.treasury.send([payment]);
+      this.monitoring.log(`Pool: Reward sent: ${hash}.`);
+      if (typeof payment.address === 'string') {
+        await this.database.resetBalanceByAddress(payment.address);
+      } else {
+        console.error(`Invalid address type: ${payment.address}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second between transactions
+    }
   }
+  
   
 
   private async allocate(amount: bigint) {

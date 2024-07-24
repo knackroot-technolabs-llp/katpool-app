@@ -1,6 +1,19 @@
 import type { IBlock, RpcClient } from "../../../wasm/kaspa"
 import { Header, PoW } from "../../../wasm/kaspa"
 import Jobs from "./jobs"
+import { Gauge } from 'prom-client';
+  
+export const minedBlocksGauge = new Gauge({
+  name: 'mined_blocks',
+  help: 'Total number of mined blocks',
+  labelNames: ['pool_address'],
+});
+
+export const paidBlocksGauge = new Gauge({
+  name: 'paid_blocks',
+  help: 'Total number of paid blocks',
+  labelNames: ['pool_address'],
+});
 
 export default class Templates {
   private rpc: RpcClient
@@ -37,6 +50,12 @@ export default class Templates {
       block: template,
       allowNonDAABlocks: false
     })
+    // Increment mined blocks gauge
+    minedBlocksGauge.labels(this.address).inc();
+
+    if (report.report.type == "success") {
+      paidBlocksGauge.labels(this.address).inc();
+    }
 
     this.templates.delete(hash)
   }

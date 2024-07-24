@@ -89,14 +89,10 @@ export default class Pool {
     for (const contribution of this.stratum.dumpContributions()) {
       const { address, difficulty, minerId } = contribution;
       const currentWork = works.get(address) ?? { minerId, difficulty: 0 };
-  
-      console.log("Pool: contribution allocate function ", contribution);
-      console.log("Pool: currentWork allocate function ", currentWork);
-  
+      
       works.set(address, { minerId, difficulty: currentWork.difficulty + difficulty });
       totalWork += difficulty;
-    }
-  
+    }  
     this.monitoring.log(`Pool: Reward with ${sompiToKaspaStringWithSuffix(amount, this.treasury.processor.networkId!)} is getting ALLOCATED into ${works.size} miners.`);
   
     const scaledTotal = BigInt(totalWork * 100);
@@ -113,6 +109,3 @@ export default class Pool {
   
   
 }
-
-
-

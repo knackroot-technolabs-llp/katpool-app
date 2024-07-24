@@ -10,6 +10,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "consul": "^1.2.0",
+    "consul-client": "^5.0.0",
     "dotenv": "^16.4.5",
     "lmdb": "^3.0.11",
     "pg": "^8.12.0",

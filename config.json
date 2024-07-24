@@ -1,5 +1,5 @@
 {
-  "node": "wss://us-1.kaspa-ng.org/testnet-11",
+  "node": "wss://tn11.onargon.com/testnet-11",
   "network" : "testnet-11",
   "pool_id" : "us01-nachopool1",
   "location" : "us-central",
@@ -9,7 +9,7 @@
     "templates": {
       "cacheSize": 300
     },
-    "difficulty": 2
+    "difficulty": 10
 
   },
   "treasury": {

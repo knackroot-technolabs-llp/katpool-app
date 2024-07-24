@@ -16,18 +16,16 @@ export default class Treasury extends EventEmitter {
     
     this.privateKey = new PrivateKey(privateKey)
     this.address = (this.privateKey.toAddress(networkId)).toString()
-    console.log("treasury: treasury address: ",this.address)
     this.processor = new UtxoProcessor({ rpc, networkId })
     this.context = new UtxoContext({ processor: this.processor })
     this.fee = fee
     this.monitoring = new Monitoring();
+    this.monitoring.log(`Treasury: Pool Wallet Address: " ${this.address}`)
 
     this.registerProcessor()
   }
   
   async send (outputs: IPaymentOutput[]) {
-    this.monitoring.log(`Treasury: Send Outputs:`)
-    console.log(outputs)
     const { transactions, summary } = await createTransactions({
       entries: this.context,
       outputs,

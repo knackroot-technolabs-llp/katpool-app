@@ -32,7 +32,7 @@ export default class Server {
         open: this.onConnect.bind(this),
         data: this.onData.bind(this),
         error: (socket, error) => {
-          console.log(error)
+          console.log("ERROR: Opennig socket: ", error)
         }
       }
     })

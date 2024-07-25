@@ -1,7 +1,6 @@
 import { EventEmitter } from 'events'
 import Monitoring from '../pool/monitoring';
-import Database from '../pool/database'
-import { PrivateKey, UtxoProcessor, UtxoContext, type RpcClient, type IPaymentOutput, createTransactions } from "../../wasm/kaspa"
+import { PrivateKey, UtxoProcessor, UtxoContext, type RpcClient, type IPaymentOutput, signTransaction , createTransactions } from "../../wasm/kaspa"
 
 export default class Treasury extends EventEmitter {
   privateKey: PrivateKey
@@ -26,6 +25,7 @@ export default class Treasury extends EventEmitter {
   }
   
   async send (outputs: IPaymentOutput[]) {
+    this.monitoring.log(`Treasury: Entering Send Function`)
     const { transactions, summary } = await createTransactions({
       entries: this.context,
       outputs,
@@ -34,8 +34,9 @@ export default class Treasury extends EventEmitter {
     })
     this.monitoring.log(`Treasury: Signing and Submitting Transaction`)
     for (const transaction of transactions) {
-      await transaction.sign([ this.privateKey ])
-      await transaction.submit(this.processor.rpc)
+      //console.log("Treasury: starting transaction process for: ", transaction)
+      const signedTransaction = signTransaction(transaction.transaction, [ this.privateKey ], true)
+      await this.processor.rpc.submitTransaction({ transaction: signedTransaction })
     }
 
     this.monitoring.log(`Treasury: Transaction ID: " ${summary.finalTransactionId}`)

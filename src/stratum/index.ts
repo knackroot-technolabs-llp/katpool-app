@@ -6,7 +6,8 @@ import { type Request, type Response, type Event, errors } from './server/protoc
 import type Templates from './templates/index.ts';
 import { calculateTarget, Address } from "../../wasm/kaspa";
 import { Encoding, encodeJob } from './templates/jobs/encoding.ts';
-import { Gauge } from 'prom-client';
+import { Pushgateway, Gauge } from 'prom-client';
+import type { RegistryContentType } from 'prom-client';
 
 type Contribution = {
   address: string;
@@ -29,24 +30,40 @@ export default class Stratum extends EventEmitter {
   private difficulty: number;
   private contributions: Map<bigint, Contribution> = new Map();
   private subscriptors: Set<Socket<Miner>> = new Set();
+  miners: Map<string, { sockets: Set<Socket<Miner>>, shares: number, hashRate: number, lastShareTime: number, difficulty: number,firstShareTime: number, accumulatedWork: number}> = new Map();
+
   private minerHashRateGauge: Gauge<string>;
   private poolHashRateGauge: Gauge<string>;
   private poolAddress: string;
-  miners: Map<string, { sockets: Set<Socket<Miner>>, shares: number, hashRate: number, lastShareTime: number, difficulty: number }> = new Map();
+  private pushGateway: Pushgateway<RegistryContentType>;
 
 
 
-  constructor(templates: Templates, port: number, initialDifficulty: number, minerHashRateGauge: Gauge<string>, poolHashRateGauge: Gauge<string>, poolAddress: string) {
+  constructor(templates: Templates, port: number, initialDifficulty: number, pushGatewayUrl: string, poolAddress: string) {
     super();
     this.server = new Server(port, initialDifficulty, this.onMessage.bind(this));
     this.difficulty = initialDifficulty;
     this.templates = templates;
-    this.minerHashRateGauge = minerHashRateGauge;
-    this.poolHashRateGauge = poolHashRateGauge;
-    this.poolAddress = poolAddress;        
+    this.poolAddress = poolAddress;
+    this.pushGateway = new Pushgateway<RegistryContentType>(pushGatewayUrl);
+  
+    // Initialize the gauges
+    this.minerHashRateGauge = new Gauge({
+      name: 'miner_hash_rate',
+      help: 'Hash rate of individual miners',
+      labelNames: ['miner_id', 'wallet_address'],
+    });
+  
+    this.poolHashRateGauge = new Gauge({
+      name: 'pool_hash_rate',
+      help: 'Overall hash rate of the pool',
+      labelNames: ['pool_address'],
+    });
+  
     this.templates.register((id, hash, timestamp) => this.announceTemplate(id, hash, timestamp));
-    this.startHashRateLogging(60000);
+    this.startHashRateLogging(600000);
   }
+  
 
   dumpContributions() {
     const contributions = Array.from(this.contributions.values());
@@ -55,7 +72,6 @@ export default class Stratum extends EventEmitter {
   }
 
   async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint) {
-    sharesGauge.labels(address).inc();
     const timestamp = Date.now();
     if (this.contributions.has(nonce)) throw Error('Duplicate share');
     const state = this.templates.getPoW(hash);
@@ -65,63 +81,73 @@ export default class Stratum extends EventEmitter {
     const validity = target <= calculateTarget(difficulty);
     if (!validity) throw Error('Invalid share');
     this.contributions.set(nonce, { address, difficulty, timestamp, minerId });
-    const minerData = this.miners.get(address) || { sockets: new Set(), shares: 0, hashRate: 0, lastShareTime: timestamp, difficulty };
+    
+    const minerData = this.miners.get(address) || {
+      sockets: new Set(),
+      shares: 0,
+      hashRate: 0,
+      lastShareTime: timestamp,
+      difficulty,
+      firstShareTime: timestamp,
+      accumulatedWork: 0
+    };
+  
+    // Retain the first share time
+    if (!this.miners.has(address)) {
+      minerData.firstShareTime = timestamp;
+    }
+    
+    minerData.accumulatedWork += difficulty;
     minerData.shares++;
     minerData.lastShareTime = timestamp;
     minerData.difficulty = difficulty;
     this.miners.set(address, minerData);
   }
+  
 
-  resetHashRates() {
+  calcHashRates() {
     let totalHashRate = 0;
-
     this.miners.forEach((minerData, address) => {
       const timeDifference = Date.now() - minerData.lastShareTime;
-      if (timeDifference > 0) {
-        const hashRate = (minerData.shares * minerData.difficulty * 1e3) / (timeDifference / 1000); // calculate in hashes per second
-        minerData.hashRate = hashRate;
-        console.log(`Stratum: the accumulated hash rate for ${address} is: `, hashRate);
+      console.log(`Resetting hash rate for ${address}: timeDifference=${timeDifference}, shares=${minerData.shares}, difficulty=${minerData.difficulty}`);
 
-        // Update the Prometheus gauge for each miner using address (wallet) and name (miner ID)
+      if (timeDifference > 0) {
         minerData.sockets.forEach(socket => {
           socket.data.workers.forEach((worker, workerName) => {
+            const hashRate = (minerData.accumulatedWork * minerData.shares) / Date.now() - minerData.firstShareTime;
+            //const hashRate = (minerData.shares * minerData.difficulty * 1e3) / (timeDifference / 1000); // calculate in hashes per second
             this.minerHashRateGauge.labels(workerName, worker.address).set(hashRate);
+            console.log(`Stratum: the accumulated hash rate for ${workerName} is: `, hashRate);
+            totalHashRate += hashRate;
           });
         });
       }
-
-      totalHashRate += minerData.hashRate;
-
-      minerData.shares = 0;
-      minerData.lastShareTime = Date.now();
     });
 
     console.log("Stratum: the accumulated overall pool hash rate is: ", totalHashRate);
 
     // Update the pool hash rate gauge
     this.poolHashRateGauge.labels(this.poolAddress).set(totalHashRate);
+
+    // Push metrics to the Pushgateway
+    this.pushMetrics();
   }
 
-  
+  async pushMetrics() {
+    try {
+      await this.pushGateway.pushAdd({ jobName: 'mining_metrics' });
+      console.log('Metrics pushed to Pushgateway');
+    } catch (err) {
+      console.error('ERROR: Error pushing metrics to Pushgateway:', err);
+    }
+  }
   
   startHashRateLogging(interval: number) {
     setInterval(() => {
-      this.resetHashRates();
+      this.calcHashRates();
     }, interval);
   }
   
-  getOverallHashRate() {
-    let totalHashRate = 0;
-    for (const miner of this.miners.values()) {
-      totalHashRate += miner.hashRate;
-    }
-    return totalHashRate;
-  }
-  
-  getMinerHashRate(address: string) {
-    const minerData = this.miners.get(address);
-    return minerData ? minerData.hashRate : 0;
-  }
   
 
   announceTemplate(id: string, hash: string, timestamp: bigint) {
@@ -173,7 +199,23 @@ export default class Stratum extends EventEmitter {
         const sockets = this.miners.get(worker.address)?.sockets || new Set();
         socket.data.workers.set(worker.name, worker);
         sockets.add(socket);
-        this.miners.set(worker.address, { sockets, shares: 0, hashRate: 0, lastShareTime: Date.now(), difficulty: this.difficulty });
+      
+        if (!this.miners.has(worker.address)) {
+          this.miners.set(worker.address, {
+            sockets,
+            shares: 0,
+            hashRate: 0,
+            lastShareTime: Date.now(),
+            difficulty: this.difficulty,
+            firstShareTime: Date.now(),
+            accumulatedWork: 0
+          });
+        } else {
+          const existingMinerData = this.miners.get(worker.address);
+          existingMinerData!.sockets = sockets;
+          this.miners.set(worker.address, existingMinerData!);
+        }
+        
         const event: Event<'set_extranonce'> = {
           method: 'set_extranonce',
           params: [randomBytes(4).toString('hex')]
@@ -184,7 +226,9 @@ export default class Stratum extends EventEmitter {
       }
       case 'mining.submit': {
         const [address, name] = request.params[0].split('.');
+        sharesGauge.labels(address).inc();
         const worker = socket.data.workers.get(name);
+        //console.log("Stratum.OnMessage: worker data: ", worker)
         if (!worker || worker.address !== address) throw Error('Mismatching worker details');
         const hash = this.templates.getHash(request.params[1]);
         if (!hash) {

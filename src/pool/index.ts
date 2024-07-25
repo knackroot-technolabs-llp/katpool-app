@@ -31,9 +31,9 @@ export default class Pool {
     this.monitoring.log(`Pool: Pool is active on port ${this.stratum.server.socket.port}.`);
     // Schedule the distribute function to run at 12 PM and 12 AM
     //schedule('0 0,12 * * *', async () => {
-    schedule('0 * * * *', async () => {      
-      await this.distribute();
-    });
+    //schedule('0 * * * *', async () => {      
+    //  await this.distribute();
+    //});
 
   }
 
@@ -73,7 +73,8 @@ export default class Pool {
       } else {
         console.error(`Invalid address type: ${payment.address}`);
       }
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second between transactions
+      console.error(`Pool: Waiting 10 seconds for payment to ${payment.address}`);
+      await new Promise(resolve => setTimeout(resolve, 10000)); // Wait for 1 second between transactions
     }
   }
   

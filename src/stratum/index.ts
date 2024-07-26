@@ -6,37 +6,14 @@ import { type Request, type Response, type Event, errors } from './server/protoc
 import type Templates from './templates/index.ts';
 import { calculateTarget, Address } from "../../wasm/kaspa";
 import { Encoding, encodeJob } from './templates/jobs/encoding.ts';
-import { Pushgateway, Gauge } from 'prom-client';
-import type { RegistryContentType } from 'prom-client';
-
-type Contribution = {
-  address: string;
-  difficulty: number;
-  timestamp: number;
-  minerId: string;
-};
-
-export const sharesGauge = new Gauge({
-  name: 'shares',
-  help: 'Total number of shares',
-  labelNames: ['pool_address'],
-});
-
-
+import { SharesManager, sharesGauge } from './sharesManager';
 
 export default class Stratum extends EventEmitter {
   server: Server;
   private templates: Templates;
   private difficulty: number;
-  private contributions: Map<bigint, Contribution> = new Map();
   private subscriptors: Set<Socket<Miner>> = new Set();
-  miners: Map<string, { sockets: Set<Socket<Miner>>, shares: number, hashRate: number, lastShareTime: number, difficulty: number,firstShareTime: number, accumulatedWork: number}> = new Map();
-
-  private minerHashRateGauge: Gauge<string>;
-  private poolHashRateGauge: Gauge<string>;
-  private poolAddress: string;
-  private pushGateway: Pushgateway<RegistryContentType>;
-
+  private sharesManager: SharesManager;
 
 
   constructor(templates: Templates, port: number, initialDifficulty: number, pushGatewayUrl: string, poolAddress: string) {
@@ -44,116 +21,12 @@ export default class Stratum extends EventEmitter {
     this.server = new Server(port, initialDifficulty, this.onMessage.bind(this));
     this.difficulty = initialDifficulty;
     this.templates = templates;
-    this.poolAddress = poolAddress;
-    this.pushGateway = new Pushgateway<RegistryContentType>(pushGatewayUrl);
-  
-    // Initialize the gauges
-    this.minerHashRateGauge = new Gauge({
-      name: 'miner_hash_rate',
-      help: 'Hash rate of individual miners',
-      //labelNames: ['miner_id', 'wallet_address'],
-      labelNames: ['wallet_address'],
-    });
-  
-    this.poolHashRateGauge = new Gauge({
-      name: 'pool_hash_rate',
-      help: 'Overall hash rate of the pool',
-      labelNames: ['pool_address'],
-    });
-  
+    this.sharesManager = new SharesManager(poolAddress, pushGatewayUrl);
     this.templates.register((id, hash, timestamp) => this.announceTemplate(id, hash, timestamp));
-    this.startHashRateLogging(600000);
-  }
-  
 
-  dumpContributions() {
-    const contributions = Array.from(this.contributions.values());
-    this.contributions.clear();
-    return contributions;
   }
 
-  async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint) {
-    const timestamp = Date.now();
-    if (this.contributions.has(nonce)) throw Error('Duplicate share');
-    const state = this.templates.getPoW(hash);
-    if (!state) throw Error('Stale header');
-    const [isBlock, target] = state.checkWork(nonce);
-    if (isBlock) await this.templates.submit(hash, nonce);
-    const validity = target <= calculateTarget(difficulty);
-    if (!validity) throw Error('Invalid share');
-    this.contributions.set(nonce, { address, difficulty, timestamp, minerId });
-    
-    const minerData = this.miners.get(address) || {
-      sockets: new Set(),
-      shares: 0,
-      hashRate: 0,
-      lastShareTime: timestamp,
-      difficulty,
-      firstShareTime: timestamp,
-      accumulatedWork: 0
-    };
-  
-    // Retain the first share time
-    if (!this.miners.has(address)) {
-      minerData.firstShareTime = timestamp;
-    }
-    
-    minerData.accumulatedWork += difficulty;
-    minerData.shares++;
-    minerData.lastShareTime = timestamp;
-    minerData.difficulty = difficulty;
-    this.miners.set(address, minerData);
-  }
-  
 
-  calcHashRates() {
-    let totalHashRate = 0;
-    this.miners.forEach((minerData, address) => {
-      const timeDifference = Date.now() - minerData.firstShareTime;
-      console.log(`Stratum: time difference ${timeDifference} of first time share ${minerData.firstShareTime} and now ${Date.now()}`);
-      console.log(`Stratum: hash rate for ${address}: timeDifference=${timeDifference}, shares=${minerData.shares}, difficulty=${minerData.difficulty}, accumulated work: ${minerData.accumulatedWork}`);
-      
-      const hashRate = (minerData.accumulatedWork * minerData.shares) / (timeDifference / 1000);
-      
-      console.log(`Stratum: the accumulated hash rate for ${address} is: `, hashRate);
-      this.minerHashRateGauge.labels(address).set(hashRate);
-      totalHashRate += hashRate;
-
-/*       if (timeDifference > 0) {
-        minerData.sockets.forEach(socket => {
-          socket.data.workers.forEach((worker, workerName) => {
-            const hashRate = (minerData.accumulatedWork * minerData.shares) / (timeDifference / 1000);
-            //const hashRate = (minerData.shares * minerData.difficulty * 1e3) / (timeDifference / 1000); // calculate in hashes per second
-            this.minerHashRateGauge.labels(workerName, worker.address).set(hashRate);
-            console.log(`Stratum: the accumulated hash rate for ${workerName} is: `, hashRate);
-            totalHashRate += hashRate;
-          });
-        });
-      } */
-    });
-    console.log("Stratum: the accumulated overall pool hash rate is: ", totalHashRate);
-    // Update the pool hash rate gauge
-    this.poolHashRateGauge.labels(this.poolAddress).set(totalHashRate);
-    // Push metrics to the Pushgateway
-    this.pushMetrics();
-  }
-
-  async pushMetrics() {
-    try {
-      await this.pushGateway.pushAdd({ jobName: 'mining_metrics' });
-      console.log('Metrics pushed to Pushgateway');
-    } catch (err) {
-      console.error('ERROR: Error pushing metrics to Pushgateway:', err);
-    }
-  }
-  
-  startHashRateLogging(interval: number) {
-    setInterval(() => {
-      this.calcHashRates();
-    }, interval);
-  }
-  
-  
 
   announceTemplate(id: string, hash: string, timestamp: bigint) {
     const tasksData: { [key in Encoding]?: string } = {};
@@ -201,12 +74,12 @@ export default class Stratum extends EventEmitter {
         if (!Address.validate(address)) throw Error('Invalid address');
         const worker: Worker = { address, name };
         if (socket.data.workers.has(worker.name)) throw Error('Worker with duplicate name');
-        const sockets = this.miners.get(worker.address)?.sockets || new Set();
+        const sockets = this.sharesManager.getMiners().get(worker.address)?.sockets || new Set();
         socket.data.workers.set(worker.name, worker);
         sockets.add(socket);
-      
-        if (!this.miners.has(worker.address)) {
-          this.miners.set(worker.address, {
+
+        if (!this.sharesManager.getMiners().has(worker.address)) {
+          this.sharesManager.getMiners().set(worker.address, {
             sockets,
             shares: 0,
             hashRate: 0,
@@ -216,11 +89,11 @@ export default class Stratum extends EventEmitter {
             accumulatedWork: 0
           });
         } else {
-          const existingMinerData = this.miners.get(worker.address);
+          const existingMinerData = this.sharesManager.getMiners().get(worker.address);
           existingMinerData!.sockets = sockets;
-          this.miners.set(worker.address, existingMinerData!);
+          this.sharesManager.getMiners().set(worker.address, existingMinerData!);
         }
-        
+
         const event: Event<'set_extranonce'> = {
           method: 'set_extranonce',
           params: [randomBytes(4).toString('hex')]
@@ -233,7 +106,6 @@ export default class Stratum extends EventEmitter {
         const [address, name] = request.params[0].split('.');
         sharesGauge.labels(address).inc();
         const worker = socket.data.workers.get(name);
-        //console.log("Stratum.OnMessage: worker data: ", worker)
         if (!worker || worker.address !== address) throw Error('Mismatching worker details');
         const hash = this.templates.getHash(request.params[1]);
         if (!hash) {
@@ -241,7 +113,7 @@ export default class Stratum extends EventEmitter {
           response.result = false;
         } else {
           const minerId = name; // Use the worker name as minerId or define your minerId extraction logic
-          await this.addShare(minerId, worker.address, hash, socket.data.difficulty, BigInt('0x' + request.params[2])).catch(err => {
+          await this.sharesManager.addShare(minerId, worker.address, hash, socket.data.difficulty, BigInt('0x' + request.params[2]), this.templates).catch(err => {
             if (!(err instanceof Error)) throw err;
             switch (err.message) {
               case 'Duplicate share':

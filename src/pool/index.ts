@@ -4,14 +4,17 @@ import Database from './database';
 import Monitoring from './monitoring';
 import { schedule } from 'node-cron';
 import { sompiToKaspaStringWithSuffix, type IPaymentOutput } from '../../wasm/kaspa';
+import { SharesManager } from '../stratum/sharesManager'; // Import SharesManager
+
 
 export default class Pool {
   private treasury: Treasury;
   private stratum: Stratum;
   private database: Database;
   private monitoring: Monitoring;
+  private sharesManager: SharesManager; // Add SharesManager property  
 
-  constructor(treasury: Treasury, stratum: Stratum) {
+  constructor(treasury: Treasury, stratum: Stratum, sharesManager: SharesManager) {
     this.treasury = treasury;
     this.stratum = stratum;
 
@@ -22,6 +25,7 @@ export default class Pool {
     
     this.database = new Database(databaseUrl); // Change this line
     this.monitoring = new Monitoring();
+    this.sharesManager = sharesManager; // Initialize SharesManager
 
     this.stratum.on('subscription', (ip: string, agent: string) => this.monitoring.log(`Pool: Miner ${ip} subscribed into notifications with ${agent}.`));
     this.treasury.on('coinbase', (amount: bigint) => this.allocate(amount));
@@ -84,7 +88,7 @@ export default class Pool {
     let works = new Map<string, { minerId: string, difficulty: number }>();
     let totalWork = 0;
   
-    for (const contribution of this.stratum.dumpContributions()) {
+    for (const contribution of this.sharesManager.dumpContributions()) {
       const { address, difficulty, minerId } = contribution;
       const currentWork = works.get(address) ?? { minerId, difficulty: 0 };
       

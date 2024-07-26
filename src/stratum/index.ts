@@ -51,7 +51,8 @@ export default class Stratum extends EventEmitter {
     this.minerHashRateGauge = new Gauge({
       name: 'miner_hash_rate',
       help: 'Hash rate of individual miners',
-      labelNames: ['miner_id', 'wallet_address'],
+      //labelNames: ['miner_id', 'wallet_address'],
+      labelNames: ['wallet_address'],
     });
   
     this.poolHashRateGauge = new Gauge({
@@ -108,27 +109,31 @@ export default class Stratum extends EventEmitter {
   calcHashRates() {
     let totalHashRate = 0;
     this.miners.forEach((minerData, address) => {
-      const timeDifference = Date.now() - minerData.lastShareTime;
-      console.log(`Resetting hash rate for ${address}: timeDifference=${timeDifference}, shares=${minerData.shares}, difficulty=${minerData.difficulty}`);
+      const timeDifference = Date.now() - minerData.firstShareTime;
+      console.log(`Stratum: time difference ${timeDifference} of first time share ${minerData.firstShareTime} and now ${Date.now()}`);
+      console.log(`Stratum: hash rate for ${address}: timeDifference=${timeDifference}, shares=${minerData.shares}, difficulty=${minerData.difficulty}, accumulated work: ${minerData.accumulatedWork}`);
+      
+      const hashRate = (minerData.accumulatedWork * minerData.shares) / (timeDifference / 1000);
+      
+      console.log(`Stratum: the accumulated hash rate for ${address} is: `, hashRate);
+      this.minerHashRateGauge.labels(address).set(hashRate);
+      totalHashRate += hashRate;
 
-      if (timeDifference > 0) {
+/*       if (timeDifference > 0) {
         minerData.sockets.forEach(socket => {
           socket.data.workers.forEach((worker, workerName) => {
-            const hashRate = (minerData.accumulatedWork * minerData.shares) / Date.now() - minerData.firstShareTime;
+            const hashRate = (minerData.accumulatedWork * minerData.shares) / (timeDifference / 1000);
             //const hashRate = (minerData.shares * minerData.difficulty * 1e3) / (timeDifference / 1000); // calculate in hashes per second
             this.minerHashRateGauge.labels(workerName, worker.address).set(hashRate);
             console.log(`Stratum: the accumulated hash rate for ${workerName} is: `, hashRate);
             totalHashRate += hashRate;
           });
         });
-      }
+      } */
     });
-
     console.log("Stratum: the accumulated overall pool hash rate is: ", totalHashRate);
-
     // Update the pool hash rate gauge
     this.poolHashRateGauge.labels(this.poolAddress).set(totalHashRate);
-
     // Push metrics to the Pushgateway
     this.pushMetrics();
   }

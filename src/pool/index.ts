@@ -31,9 +31,9 @@ export default class Pool {
     this.monitoring.log(`Pool: Pool is active on port ${this.stratum.server.socket.port}.`);
     // Schedule the distribute function to run at 12 PM and 12 AM
     //schedule('0 0,12 * * *', async () => {
-    //schedule('0 * * * *', async () => {      
-    //  await this.distribute();
-    //});
+    schedule('0 * * * *', async () => {      
+      await this.distribute();
+    });
 
   }
 

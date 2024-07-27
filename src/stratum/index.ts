@@ -15,7 +15,6 @@ export default class Stratum extends EventEmitter {
   private subscriptors: Set<Socket<Miner>> = new Set();
   private sharesManager: SharesManager;
 
-
   constructor(templates: Templates, port: number, initialDifficulty: number, pushGatewayUrl: string, poolAddress: string) {
     super();
     this.server = new Server(port, initialDifficulty, this.onMessage.bind(this));
@@ -23,10 +22,8 @@ export default class Stratum extends EventEmitter {
     this.templates = templates;
     this.sharesManager = new SharesManager(poolAddress, pushGatewayUrl);
     this.templates.register((id, hash, timestamp) => this.announceTemplate(id, hash, timestamp));
-
+    console.log(`[${new Date().toISOString()}] Stratum: Initialized with difficulty ${this.difficulty}`);
   }
-
-
 
   announceTemplate(id: string, hash: string, timestamp: bigint) {
     const tasksData: { [key in Encoding]?: string } = {};
@@ -67,6 +64,7 @@ export default class Stratum extends EventEmitter {
         this.subscriptors.add(socket);
         response.result = [true, 'EthereumStratum/1.0.0'];
         this.emit('subscription', socket.remoteAddress, request.params[0]);
+        console.log(`[${new Date().toISOString()}] Stratum: Miner subscribed from ${socket.remoteAddress}`);
         break;
       }
       case 'mining.authorize': {
@@ -86,7 +84,8 @@ export default class Stratum extends EventEmitter {
             lastShareTime: Date.now(),
             difficulty: this.difficulty,
             firstShareTime: Date.now(),
-            accumulatedWork: 0
+            accumulatedWork: 0,
+            workerStats: new Map()
           });
         } else {
           const existingMinerData = this.sharesManager.getMiners().get(worker.address);
@@ -100,6 +99,7 @@ export default class Stratum extends EventEmitter {
         };
         socket.write(JSON.stringify(event) + '\n');
         this.reflectDifficulty(socket);
+        console.log(`[${new Date().toISOString()}] Stratum: Worker authorized - Address: ${address}, Worker Name: ${name}`);
         break;
       }
       case 'mining.submit': {
@@ -131,6 +131,7 @@ export default class Stratum extends EventEmitter {
             response.result = false;
           });
         }
+        console.log(`[${new Date().toISOString()}] Stratum: Share submitted - Address: ${address}, Worker Name: ${name}`);
         break;
       }
       default:

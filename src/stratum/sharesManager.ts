@@ -2,29 +2,27 @@ import type { Socket } from 'bun';
 import { calculateTarget } from "../../wasm/kaspa";
 import { Pushgateway, Gauge } from 'prom-client';
 import type { RegistryContentType } from 'prom-client';
-import { stringifyHashrate, getAverageHashrateGHs } from './utils'; // Import the helper functions
+import { stringifyHashrate, getAverageHashrateGHs } from './utils';
 
-type MinerData = {
-  sockets: Set<Socket<any>>,
-  shares: number,
-  hashRate: number,
-  lastShareTime: number,
-  difficulty: number,
-  firstShareTime: number,
-  accumulatedWork: number,
-  workerStats: Map<string, WorkerStats> // Add worker stats to MinerData
-};
-
-export interface WorkerStats { // Add export here
+export interface WorkerStats {
+  blocksFound: number;
   sharesFound: number;
+  sharesDiff: number;
   staleShares: number;
   invalidShares: number;
   workerName: string;
   startTime: number;
   lastShare: number;
+  varDiffStartTime: number;
   varDiffSharesFound: number;
+  varDiffWindow: number;
   minDiff: number;
 }
+
+type MinerData = {
+  sockets: Set<Socket<any>>,
+  workerStats: WorkerStats
+};
 
 type Contribution = {
   address: string;
@@ -67,21 +65,24 @@ export class SharesManager {
     this.startStatsThread(); // Start the stats logging thread
   }
 
-  // Add a method to create or get existing worker stats
   getOrCreateWorkerStats(workerName: string, minerData: MinerData): WorkerStats {
-    let workerStats = minerData.workerStats.get(workerName);
+    let workerStats = minerData.workerStats;
     if (!workerStats) {
       workerStats = {
+        blocksFound: 0,
         sharesFound: 0,
+        sharesDiff: 0,
         staleShares: 0,
         invalidShares: 0,
         workerName,
         startTime: Date.now(),
         lastShare: Date.now(),
+        varDiffStartTime: Date.now(),
         varDiffSharesFound: 0,
-        minDiff: minerData.difficulty
+        varDiffWindow: 0,
+        minDiff: 1 // Set to initial difficulty
       };
-      minerData.workerStats.set(workerName, workerStats);
+      minerData.workerStats = workerStats;
       console.log(`[${new Date().toISOString()}] SharesManager: Created new worker stats for ${workerName}`);
     }
     return workerStats;
@@ -119,33 +120,28 @@ export class SharesManager {
     if (!minerData) {
       minerData = {
         sockets: new Set(),
-        shares: 0,
-        hashRate: 0,
-        lastShareTime: timestamp,
-        difficulty,
-        firstShareTime: timestamp,
-        accumulatedWork: 0,
-        workerStats: new Map()
+        workerStats: {
+          blocksFound: 0,
+          sharesFound: 0,
+          sharesDiff: 0,
+          staleShares: 0,
+          invalidShares: 0,
+          workerName: minerId,
+          startTime: Date.now(),
+          lastShare: Date.now(),
+          varDiffStartTime: Date.now(),
+          varDiffSharesFound: 0,
+          varDiffWindow: 0,
+          minDiff: difficulty
+        }
       };
       this.miners.set(address, minerData);
     }
 
-    // Retain the first share time
-    if (!this.miners.has(address)) {
-      minerData.firstShareTime = timestamp;
-    }
-
-    minerData.accumulatedWork += difficulty;
-    minerData.shares++;
-    minerData.lastShareTime = timestamp;
-    minerData.difficulty = difficulty;
-    this.miners.set(address, minerData);
-
-    // Update worker stats
-    const workerStats = this.getOrCreateWorkerStats(minerId, minerData);
-    workerStats.sharesFound++;
-    workerStats.varDiffSharesFound++;
-    workerStats.lastShare = timestamp;
+    minerData.workerStats.sharesFound++;
+    minerData.workerStats.varDiffSharesFound++;
+    minerData.workerStats.lastShare = timestamp;
+    minerData.workerStats.minDiff = difficulty;
 
     console.log(`[${new Date().toISOString()}] SharesManager: Share added for ${minerId} - Address: ${address}`);
   }
@@ -161,31 +157,29 @@ export class SharesManager {
       let totalRate = 0;
 
       this.miners.forEach((minerData, address) => {
-        minerData.workerStats.forEach((stats, workerName) => {
-          const rate = getAverageHashrateGHs(stats);
-          totalRate += rate;
-          const rateStr = stringifyHashrate(rate);
-          const ratioStr = `${stats.sharesFound}/${stats.staleShares}/${stats.invalidShares}`;
-          lines.push(
-            ` ${workerName.padEnd(15)}| ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${minerData.shares.toString().padEnd(12)} | ${(Date.now() - stats.startTime) / 1000}s`
-          );
-        });
+        const stats = minerData.workerStats;
+        const rate = getAverageHashrateGHs(stats);
+        totalRate += rate;
+        const rateStr = stringifyHashrate(rate);
+        const ratioStr = `${stats.sharesFound}/${stats.staleShares}/${stats.invalidShares}`;
+        lines.push(
+          ` ${stats.workerName.padEnd(15)}| ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${stats.blocksFound.toString().padEnd(12)} | ${(Date.now() - stats.startTime) / 1000}s`
+        );
       });
 
       lines.sort();
       str += lines.join("\n");
       const rateStr = stringifyHashrate(totalRate);
       const overallStats = Array.from(this.miners.values()).reduce((acc, minerData) => {
-        minerData.workerStats.forEach(stats => {
-          acc.sharesFound += stats.sharesFound;
-          acc.staleShares += stats.staleShares;
-          acc.invalidShares += stats.invalidShares;
-        });
+        const stats = minerData.workerStats;
+        acc.sharesFound += stats.sharesFound;
+        acc.staleShares += stats.staleShares;
+        acc.invalidShares += stats.invalidShares;
         return acc;
       }, { sharesFound: 0, staleShares: 0, invalidShares: 0 });
       const ratioStr = `${overallStats.sharesFound}/${overallStats.staleShares}/${overallStats.invalidShares}`;
       str += "\n-------------------------------------------------------------------------------\n";
-      str += `                | ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${Array.from(this.miners.values()).reduce((acc, minerData) => acc + minerData.shares, 0).toString().padEnd(12)} | ${(Date.now() - start) / 1000}s`;
+      str += `                | ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${Array.from(this.miners.values()).reduce((acc, minerData) => acc + minerData.workerStats.blocksFound, 0).toString().padEnd(12)} | ${(Date.now() - start) / 1000}s`;
       str += "\n==========================================================\n";
       console.log(str);
     }, 600000); // 10 minutes
@@ -194,17 +188,12 @@ export class SharesManager {
   calcHashRates() {
     let totalHashRate = 0;
     this.miners.forEach((minerData, address) => {
-      const timeDifference = (Date.now() - minerData.firstShareTime) / 1000; // Convert to seconds
-      let minerHashRate = 0;
-      minerData.workerStats.forEach((stats, workerName) => {
-        const workerTimeDifference = (Date.now() - stats.startTime) / 1000; // Convert to seconds
-        const workerHashRate = (stats.minDiff * stats.varDiffSharesFound) / workerTimeDifference;
-        minerHashRate += workerHashRate;
-        console.log(`[${new Date().toISOString()}] SharesManager: Worker ${workerName} stats - Time: ${workerTimeDifference}s, HashRate: ${workerHashRate}H/s, SharesFound: ${stats.sharesFound}, StaleShares: ${stats.staleShares}, InvalidShares: ${stats.invalidShares}`);
-      });
-      this.minerHashRateGauge.labels(address).set(minerHashRate);
-      totalHashRate += minerHashRate;
-      console.log(`[${new Date().toISOString()}] SharesManager: Miner ${address} hash rate updated to ${minerHashRate}H/s`);
+      const timeDifference = (Date.now() - minerData.workerStats.startTime) / 1000; // Convert to seconds
+      const workerStats = minerData.workerStats;
+      const workerHashRate = (workerStats.minDiff * workerStats.varDiffSharesFound) / timeDifference;
+      this.minerHashRateGauge.labels(address).set(workerHashRate);
+      totalHashRate += workerHashRate;
+      console.log(`[${new Date().toISOString()}] SharesManager: Worker ${workerStats.workerName} stats - Time: ${timeDifference}s, HashRate: ${workerHashRate}H/s, SharesFound: ${workerStats.sharesFound}, StaleShares: ${workerStats.staleShares}, InvalidShares: ${workerStats.invalidShares}`);
     });
     this.poolHashRateGauge.labels(this.poolAddress).set(totalHashRate);
     console.log(`[${new Date().toISOString()}] SharesManager: Total pool hash rate updated to ${totalHashRate}H/s`);

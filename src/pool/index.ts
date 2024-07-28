@@ -49,7 +49,7 @@ export default class Pool {
     for (const contribution of this.sharesManager.dumpContributions()) {
       const { address, difficulty, minerId } = contribution;
       const currentWork = works.get(address) ?? { minerId, difficulty: 0 };
-      
+
       works.set(address, { minerId, difficulty: currentWork.difficulty + difficulty });
       totalWork += difficulty;
     }  
@@ -61,12 +61,11 @@ export default class Pool {
     for (const [address, work] of works) {
       const scaledWork = BigInt(work.difficulty * 100);
       const share = (scaledWork * minerReward) / scaledTotal;
-      //const user = await this.database.getUser(work.minerId, address);
       await this.database.addBalance(work.minerId, address, share);
-      if (DEBUG) this.monitoring.debug(`Pool: Reward with ${sompiToKaspaStringWithSuffix(minerReward, this.treasury.processor.networkId!)} was ALLOCATED to ${work.minerId}.`);
-      this.revenuize(poolFee)
-
+      if (DEBUG) this.monitoring.debug(`Pool: Reward with ${sompiToKaspaStringWithSuffix(minerReward, this.treasury.processor.networkId!)} was ALLOCATED to ${work.minerId} with work difficulty ${work.difficulty}`);
     }
+    if (works.size > 0) this.revenuize(poolFee)
+
   }
   
 }

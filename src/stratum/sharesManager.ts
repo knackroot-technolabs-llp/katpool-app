@@ -144,8 +144,9 @@ export class SharesManager {
       minerInvalidShares.labels(minerId, address).inc();
       throw Error('Invalid share');
     } 
+
     this.contributions.set(nonce, { address, difficulty, timestamp, minerId });
-    if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address}`);
+    if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);
 
     if (report) minerData.workerStats.blocksFound++;
 
@@ -214,6 +215,7 @@ export class SharesManager {
 
   dumpContributions() {
     const contributions = Array.from(this.contributions.values());
+    if (DEBUG) this.monitoring.debug(`SharesManager: Amount of contributions per miner for this cycle ${contributions.length}`);
     this.contributions.clear();
     return contributions;
   }

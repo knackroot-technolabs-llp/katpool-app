@@ -36,7 +36,7 @@ export default class Treasury extends EventEmitter {
       const reward = e.data.value
       this.monitoring.log(`Treasury: Rewards to distribute on this coinbase cycle :  ${reward}.`);
       const poolFee = (reward * BigInt(this.fee * 100)) / 10000n
-      this.monitoring.log(`Treasury: Pool fees to distribute on thei coinbase cycle: ${poolFee}.`);
+      this.monitoring.log(`Treasury: Pool fees to distribute on the coinbase cycle: ${poolFee}.`);
       this.emit('coinbase', reward - poolFee, poolFee)     
     })
 

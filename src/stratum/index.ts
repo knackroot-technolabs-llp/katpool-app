@@ -7,7 +7,7 @@ import type Templates from './templates/index.ts';
 import { Address } from "../../wasm/kaspa";
 import { Encoding, encodeJob } from './templates/jobs/encoding.ts';
 import { SharesManager } from './sharesManager';
-import { minerShares } from '../prometheus'
+import { minerShares, jobsNotFound } from '../prometheus'
 import Monitoring from '../pool/monitoring/index.ts';
 import { DEBUG } from '../../index'
 
@@ -127,11 +127,12 @@ export default class Stratum extends EventEmitter {
         const hash = this.templates.getHash(request.params[1]);
         if (!hash) {
           if (DEBUG) this.monitoring.debug(`Stratum: Job not found - Address: ${address}, Worker Name: ${name}`);
+          jobsNotFound.labels(name, address).inc();
           response.error = errors['JOB_NOT_FOUND'];
           response.result = false;
         } else {
           const minerId = name; // Use the worker name as minerId or define your minerId extraction logic
-          if (DEBUG) this.monitoring.debug(`Stratum: Submitting Share - Address: ${address}, Worker Name: ${name}`);
+          if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name} , Hash: ${hash}`);
           await this.sharesManager.addShare(minerId, worker.address, hash, socket.data.difficulty, BigInt('0x' + request.params[2]), this.templates).catch(err => {
             if (!(err instanceof Error)) throw err;
             switch (err.message) {
@@ -150,7 +151,6 @@ export default class Stratum extends EventEmitter {
             response.result = false;
           });
         }
-        if (DEBUG) this.monitoring.debug(`Stratum: Share submitted - Address: ${address}, Worker Name: ${name}`);
         break;
       }
       default:

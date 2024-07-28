@@ -62,7 +62,7 @@ export default class Pool {
       const scaledWork = BigInt(work.difficulty * 100);
       const share = (scaledWork * minerReward) / scaledTotal;
       await this.database.addBalance(work.minerId, address, share);
-      if (DEBUG) this.monitoring.debug(`Pool: Reward with ${sompiToKaspaStringWithSuffix(minerReward, this.treasury.processor.networkId!)} was ALLOCATED to ${work.minerId} with work difficulty ${work.difficulty}`);
+      if (DEBUG) this.monitoring.debug(`Pool: Reward with ${sompiToKaspaStringWithSuffix(share, this.treasury.processor.networkId!)} was ALLOCATED to ${work.minerId} with work difficulty ${work.difficulty}`);
     }
     if (works.size > 0) this.revenuize(poolFee)
 

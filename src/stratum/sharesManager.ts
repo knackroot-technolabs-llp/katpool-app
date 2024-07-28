@@ -90,8 +90,7 @@ export class SharesManager {
 
   async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint, templates: any) {
     minerAddedShares.labels(minerId, address).inc();
-    if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - once: ${nonce}`)
-
+    if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - once: ${nonce} - hash: ${hash}`)
     const timestamp = Date.now();
     let report
     let minerData = this.miners.get(address);
@@ -202,7 +201,7 @@ export class SharesManager {
       if (DEBUG) this.monitoring.debug(`SharesManager: Worker ${workerStats.workerName} stats - Time: ${timeDifference}s, Difficulty: ${workerStats.minDiff}, HashRate: ${workerHashRate}H/s, SharesFound: ${workerStats.sharesFound}, StaleShares: ${workerStats.staleShares}, InvalidShares: ${workerStats.invalidShares}`);
     });
     poolHashRateGauge.labels(this.poolAddress).set(totalHashRate);
-    if (DEBUG) this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate}H/s`);
+    if (DEBUG) this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate} GH/s`);
   }
 
   getMiners() {

@@ -62,3 +62,9 @@ export const paidBlocksGauge = new Gauge({
   help: 'Total number of paid blocks',
   labelNames: ['miner_id', 'pool_address'],
 });
+
+export const jobsNotFound = new Gauge({
+  name: 'jobs_not_found',
+  help: 'Total jobs not Found for registered template',
+  labelNames: ['miner_id', 'pool_address'],
+});

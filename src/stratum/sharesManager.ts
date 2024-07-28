@@ -3,6 +3,9 @@ import { calculateTarget } from "../../wasm/kaspa";
 import { Pushgateway, Gauge } from 'prom-client';
 import type { RegistryContentType } from 'prom-client';
 import { stringifyHashrate, getAverageHashrateGHs } from './utils';
+import Monitoring from '../pool/monitoring'
+import { DEBUG } from '../../index'
+import { minerHashRateGauge, poolHashRateGauge , minerAddedShares, minerIsBlockShare, minerInvalidShares, minerStaleShares, minerDuplicatedShares } from '../prometheus'
 
 export interface WorkerStats {
   blocksFound: number;
@@ -31,35 +34,16 @@ type Contribution = {
   minerId: string;
 };
 
-export const sharesGauge = new Gauge({
-  name: 'shares',
-  help: 'Total number of shares',
-  labelNames: ['pool_address'],
-});
-
 export class SharesManager {
   private contributions: Map<bigint, Contribution> = new Map();
   private miners: Map<string, MinerData> = new Map();
-  private minerHashRateGauge: Gauge<string>;
-  private poolHashRateGauge: Gauge<string>;
   private poolAddress: string;
   private pushGateway: Pushgateway<RegistryContentType>;
+  private monitoring: Monitoring;
 
   constructor(poolAddress: string, pushGatewayUrl: string) {
     this.poolAddress = poolAddress;
-
-    this.minerHashRateGauge = new Gauge({
-      name: 'miner_hash_rate',
-      help: 'Hash rate of individual miners',
-      labelNames: ['wallet_address'],
-    });
-
-    this.poolHashRateGauge = new Gauge({
-      name: 'pool_hash_rate',
-      help: 'Overall hash rate of the pool',
-      labelNames: ['pool_address'],
-    });
-
+    this.monitoring = new Monitoring();
     this.pushGateway = new Pushgateway<RegistryContentType>(pushGatewayUrl);
     this.startHashRateLogging(60000);
     this.startStatsThread(); // Start the stats logging thread
@@ -83,7 +67,7 @@ export class SharesManager {
         minDiff: 1 // Set to initial difficulty
       };
       minerData.workerStats = workerStats;
-      console.log(`[${new Date().toISOString()}] SharesManager: Created new worker stats for ${workerName}`);
+      if (DEBUG) this.monitoring.debug(`SharesManager: Created new worker stats for ${workerName}`);
     }
     return workerStats;
   }
@@ -91,7 +75,7 @@ export class SharesManager {
   async pushMetrics() {
     try {
       await this.pushGateway.pushAdd({ jobName: 'mining_metrics' });
-      console.log(`[${new Date().toISOString()}] SharesManager: Metrics pushed to Pushgateway`);
+      this.monitoring.log(`SharesManager: Metrics pushed to Pushgateway`);
     } catch (err) {
       console.error(`[${new Date().toISOString()}] SharesManager: ERROR: Error pushing metrics to Pushgateway:`, err);
     }
@@ -105,17 +89,11 @@ export class SharesManager {
   }
 
   async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint, templates: any) {
-    sharesGauge.labels(address).inc();
-    const timestamp = Date.now();
-    if (this.contributions.has(nonce)) throw Error('Duplicate share');
-    const state = templates.getPoW(hash);
-    if (!state) throw Error('Stale header');
-    const [isBlock, target] = state.checkWork(nonce);
-    if (isBlock) await templates.submit(hash, nonce);
-    const validity = target <= calculateTarget(difficulty);
-    if (!validity) throw Error('Invalid share');
-    this.contributions.set(nonce, { address, difficulty, timestamp, minerId });
+    minerAddedShares.labels(minerId, address).inc();
+    if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - once: ${nonce}`)
 
+    const timestamp = Date.now();
+    let report
     let minerData = this.miners.get(address);
     if (!minerData) {
       minerData = {
@@ -136,14 +114,41 @@ export class SharesManager {
         }
       };
       this.miners.set(address, minerData);
-    }
-
+    }    
     minerData.workerStats.sharesFound++;
     minerData.workerStats.varDiffSharesFound++;
     minerData.workerStats.lastShare = timestamp;
     minerData.workerStats.minDiff = difficulty;
 
-    console.log(`[${new Date().toISOString()}] SharesManager: Share added for ${minerId} - Address: ${address}`);
+
+    if (this.contributions.has(nonce)){
+      minerDuplicatedShares.labels(minerId, address).inc();
+      throw Error('Duplicate share');
+    }
+    const state = templates.getPoW(hash);
+    if (!state){
+      if (DEBUG) this.monitoring.debug(`SharesManager: Stale header for miner ${minerId} and hash: ${hash}`);
+      minerStaleShares.labels(minerId, address).inc();
+      throw Error('Stale header');
+    }
+    const [isBlock, target] = state.checkWork(nonce);
+    if (isBlock) {
+      if (DEBUG) this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
+      minerIsBlockShare.labels(minerId, address).inc();
+      report = await templates.submit(minerId, hash, nonce);
+    }  
+    const validity = target <= calculateTarget(difficulty);
+    
+    if (!validity){
+      if (DEBUG) this.monitoring.debug(`SharesManager: Invalid share for target: ${target} for miner ${minerId}`);
+      minerInvalidShares.labels(minerId, address).inc();
+      throw Error('Invalid share');
+    } 
+    this.contributions.set(nonce, { address, difficulty, timestamp, minerId });
+    if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address}`);
+
+    if (report) minerData.workerStats.blocksFound++;
+
   }
 
   startStatsThread() {
@@ -180,7 +185,7 @@ export class SharesManager {
       const ratioStr = `${overallStats.sharesFound}/${overallStats.staleShares}/${overallStats.invalidShares}`;
       str += "\n-------------------------------------------------------------------------------\n";
       str += `                | ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${Array.from(this.miners.values()).reduce((acc, minerData) => acc + minerData.workerStats.blocksFound, 0).toString().padEnd(12)} | ${(Date.now() - start) / 1000}s`;
-      str += "\n==========================================================\n";
+      str += "\n===============================================================================\n";
       console.log(str);
     }, 600000); // 10 minutes
   }
@@ -191,12 +196,12 @@ export class SharesManager {
       const timeDifference = (Date.now() - minerData.workerStats.startTime) / 1000; // Convert to seconds
       const workerStats = minerData.workerStats;
       const workerHashRate = (workerStats.minDiff * workerStats.varDiffSharesFound) / timeDifference;
-      this.minerHashRateGauge.labels(address).set(workerHashRate);
+      minerHashRateGauge.labels(minerData.workerStats.workerName , address).set(workerHashRate);
       totalHashRate += workerHashRate;
-      console.log(`[${new Date().toISOString()}] SharesManager: Worker ${workerStats.workerName} stats - Time: ${timeDifference}s, HashRate: ${workerHashRate}H/s, SharesFound: ${workerStats.sharesFound}, StaleShares: ${workerStats.staleShares}, InvalidShares: ${workerStats.invalidShares}`);
+      if (DEBUG) this.monitoring.debug(`SharesManager: Worker ${workerStats.workerName} stats - Time: ${timeDifference}s, Difficulty: ${workerStats.minDiff}, HashRate: ${workerHashRate}H/s, SharesFound: ${workerStats.sharesFound}, StaleShares: ${workerStats.staleShares}, InvalidShares: ${workerStats.invalidShares}`);
     });
-    this.poolHashRateGauge.labels(this.poolAddress).set(totalHashRate);
-    console.log(`[${new Date().toISOString()}] SharesManager: Total pool hash rate updated to ${totalHashRate}H/s`);
+    poolHashRateGauge.labels(this.poolAddress).set(totalHashRate);
+    if (DEBUG) this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate}H/s`);
   }
 
   getMiners() {

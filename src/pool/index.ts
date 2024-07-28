@@ -3,6 +3,7 @@ import type Stratum from '../stratum';
 import Database from './database';
 import Monitoring from './monitoring';
 import { sompiToKaspaStringWithSuffix, type IPaymentOutput } from '../../wasm/kaspa';
+import { DEBUG } from "../../index"
 import { SharesManager } from '../stratum/sharesManager'; // Import SharesManager
 
 
@@ -52,17 +53,16 @@ export default class Pool {
       works.set(address, { minerId, difficulty: currentWork.difficulty + difficulty });
       totalWork += difficulty;
     }  
-    this.monitoring.log(`Pool: Reward with ${sompiToKaspaStringWithSuffix(amount, this.treasury.processor.networkId!)} is getting ALLOCATED into ${works.size} miners.`);
+    if (works.size > 0) this.monitoring.log(`Pool: Preparing Reward ${sompiToKaspaStringWithSuffix(amount, this.treasury.processor.networkId!)} for ${works.size} miners.`);
   
     const scaledTotal = BigInt(totalWork * 100);
   
     for (const [address, work] of works) {
       const scaledWork = BigInt(work.difficulty * 100);
       const share = (scaledWork * amount) / scaledTotal;
-  
-      const user = await this.database.getUser(work.minerId, address);
-  
+      //const user = await this.database.getUser(work.minerId, address);
       await this.database.addBalance(work.minerId, address, share);
+      if (DEBUG) this.monitoring.debug(`Pool: Reward with ${sompiToKaspaStringWithSuffix(amount, this.treasury.processor.networkId!)} was ALLOCATED to ${work.minerId}.`);
     }
   }
   

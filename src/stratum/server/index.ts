@@ -1,6 +1,7 @@
 import type { Socket, TCPSocketListener } from 'bun'
 import { parseMessage, type Request, type Response } from './protocol'
 import { Encoding } from '../templates/jobs/encoding'
+import Monitoring from '../../pool/monitoring'
 
 export type Worker = {
   address: string,
@@ -20,8 +21,10 @@ export default class Server {
   socket: TCPSocketListener<Miner>
   difficulty: number
   private onMessage: MessageCallback
+  private monitoring: Monitoring
 
   constructor (port: number, difficulty: number, onMessage: MessageCallback) {
+    this.monitoring = new Monitoring
     this.difficulty = difficulty
     this.onMessage = onMessage
 
@@ -32,7 +35,7 @@ export default class Server {
         open: this.onConnect.bind(this),
         data: this.onData.bind(this),
         error: (socket, error) => {
-          console.log("ERROR: Opennig socket: ", error)
+          this.monitoring.error(`Opennig socket: ${error}`)
         }
       }
     })

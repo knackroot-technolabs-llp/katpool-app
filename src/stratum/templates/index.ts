@@ -1,19 +1,10 @@
 import type { IBlock, RpcClient } from "../../../wasm/kaspa"
 import { Header, PoW } from "../../../wasm/kaspa"
 import Jobs from "./jobs"
-import { Gauge } from 'prom-client';
+import { minedBlocksGauge, paidBlocksGauge } from '../../prometheus';
+import Monitoring from '../../pool/monitoring'
+import { DEBUG } from '../../../index'
   
-export const minedBlocksGauge = new Gauge({
-  name: 'mined_blocks',
-  help: 'Total number of mined blocks',
-  labelNames: ['pool_address'],
-});
-
-export const paidBlocksGauge = new Gauge({
-  name: 'paid_blocks',
-  help: 'Total number of paid blocks',
-  labelNames: ['pool_address'],
-});
 
 export default class Templates {
   private rpc: RpcClient
@@ -21,8 +12,10 @@ export default class Templates {
   private templates: Map<string, [ IBlock, PoW ]> = new Map()
   private jobs: Jobs = new Jobs()
   private cacheSize: number
+  private monitoring: Monitoring
 
   constructor (rpc: RpcClient, address: string, cacheSize: number) {
+    this.monitoring = new Monitoring()
     this.rpc = rpc
     this.address = address
     this.cacheSize = cacheSize
@@ -36,7 +29,7 @@ export default class Templates {
     return this.templates.get(hash)?.[1]
   }
 
-  async submit (hash: string, nonce: bigint) {
+  async submit (minerId: string, hash: string, nonce: bigint) {
     const template = this.templates.get(hash)![0]
     const header = new Header(template.header)
 
@@ -50,14 +43,15 @@ export default class Templates {
       block: template,
       allowNonDAABlocks: false
     })
-    // Increment mined blocks gauge
-    minedBlocksGauge.labels(this.address).inc();
-
+    minedBlocksGauge.labels(minerId, this.address).inc();
+    
     if (report.report.type == "success") {
-      paidBlocksGauge.labels(this.address).inc();
+      paidBlocksGauge.labels(minerId, this.address).inc();
     }
+    if (DEBUG) this.monitoring.debug(`Templates: the block has been ${report.report.type}, reason: ${report.report.reason}`)
 
     this.templates.delete(hash)
+    return report.report.type
   }
 
   async register (callback: (id: string, hash: string, timestamp: bigint) => void) {

@@ -7,7 +7,7 @@ import type Templates from './templates/index.ts';
 import { Address } from "../../wasm/kaspa";
 import { Encoding, encodeJob } from './templates/jobs/encoding.ts';
 import { SharesManager } from './sharesManager';
-import { minerShares, jobsNotFound } from '../prometheus'
+import { minerjobSubmissions, jobsNotFound } from '../prometheus'
 import Monitoring from '../pool/monitoring/index.ts';
 import { DEBUG } from '../../index'
 
@@ -21,7 +21,7 @@ export default class Stratum extends EventEmitter {
   private monitoring: Monitoring
   sharesManager: SharesManager;
 
-  constructor(templates: Templates, port: number, initialDifficulty: number, pushGatewayUrl: string, poolAddress: string) {
+  constructor(templates: Templates, port: number, initialDifficulty: number, pushGatewayUrl: string, poolAddress: string, sharesPerMin: number) {
     super();
     this.monitoring = new Monitoring
     this.sharesManager = new SharesManager(poolAddress, pushGatewayUrl);
@@ -30,6 +30,13 @@ export default class Stratum extends EventEmitter {
     this.templates = templates;
     this.templates.register((id, hash, timestamp) => this.announceTemplate(id, hash, timestamp));
     this.monitoring.log(`Stratum: Initialized with difficulty ${this.difficulty}`);
+
+        // Start the VarDiff thread
+    //const sharesPerMin = 20; // Example value, adjust as necessary
+    const varDiffStats = true; // Enable logging of VarDiff stats
+    const clampPow2 = true; // Enable clamping difficulty to powers of 2
+    this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
+
   }
 
   announceTemplate(id: string, hash: string, timestamp: bigint) {
@@ -113,12 +120,13 @@ export default class Stratum extends EventEmitter {
         };
         socket.write(JSON.stringify(event) + '\n');
         this.reflectDifficulty(socket);
-        if (DEBUG) this.monitoring.debug(`Stratum: Worker authorized - Address: ${address}, Worker Name: ${name}`);
+        if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
         break;
       }
+      // Inside the mining.submit case in the onMessage function
       case 'mining.submit': {
-        const [address, name] = request.params[0].split('.');          
-        minerShares.labels(name, address).inc();
+        const [address, name] = request.params[0].split('.');
+        minerjobSubmissions.labels(name, address).inc();
         const worker = socket.data.workers.get(name);
         if (!worker || worker.address !== address) {
           if (DEBUG) this.monitoring.debug(`Stratum: Mismatching worker details - Address: ${address}, Worker Name: ${name}`);
@@ -132,8 +140,9 @@ export default class Stratum extends EventEmitter {
           response.result = false;
         } else {
           const minerId = name; // Use the worker name as minerId or define your minerId extraction logic
-          if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name} , Hash: ${hash}`);
-          await this.sharesManager.addShare(minerId, worker.address, hash, socket.data.difficulty, BigInt('0x' + request.params[2]), this.templates).catch(err => {
+          const currentDifficulty = this.sharesManager.getMiners().get(worker.address)?.workerStats.minDiff || socket.data.difficulty;
+          if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
+          await this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, BigInt('0x' + request.params[2]), this.templates).catch(err => {
             if (!(err instanceof Error)) throw err;
             switch (err.message) {
               case 'Duplicate share':
@@ -153,9 +162,12 @@ export default class Stratum extends EventEmitter {
         }
         break;
       }
+
       default:
         throw errors['UNKNOWN'];
     }
     return response;
   }
+  
 }
+

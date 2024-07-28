@@ -5,7 +5,7 @@ import type { RegistryContentType } from 'prom-client';
 import { stringifyHashrate, getAverageHashrateGHs } from './utils';
 import Monitoring from '../pool/monitoring'
 import { DEBUG } from '../../index'
-import { minerHashRateGauge, poolHashRateGauge , minerAddedShares, minerIsBlockShare, minerInvalidShares, minerStaleShares, minerDuplicatedShares } from '../prometheus'
+import { minerHashRateGauge, poolHashRateGauge , minerAddedShares, minerIsBlockShare, minerInvalidShares, minerStaleShares, minerDuplicatedShares, varDiff } from '../prometheus'
 
 export interface WorkerStats {
   blocksFound: number;
@@ -89,13 +89,16 @@ export class SharesManager {
   }
 
   async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint, templates: any) {
+    const minerData = this.miners.get(address);
+    const currentDifficulty = minerData ? minerData.workerStats.minDiff : difficulty;
+  
     minerAddedShares.labels(minerId, address).inc();
-    if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - once: ${nonce} - hash: ${hash}`)
+    if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - Nonce: ${nonce} - Hash: ${hash}`);
     const timestamp = Date.now();
-    let report
-    let minerData = this.miners.get(address);
+    let report;
+  
     if (!minerData) {
-      minerData = {
+      this.miners.set(address, {
         sockets: new Set(),
         workerStats: {
           blocksFound: 0,
@@ -109,17 +112,16 @@ export class SharesManager {
           varDiffStartTime: Date.now(),
           varDiffSharesFound: 0,
           varDiffWindow: 0,
-          minDiff: difficulty
+          minDiff: currentDifficulty
         }
-      };
-      this.miners.set(address, minerData);
-    }    
-    minerData.workerStats.sharesFound++;
-    minerData.workerStats.varDiffSharesFound++;
-    minerData.workerStats.lastShare = timestamp;
-    minerData.workerStats.minDiff = difficulty;
-
-
+      });
+    } else {
+      minerData.workerStats.sharesFound++;
+      minerData.workerStats.varDiffSharesFound++;
+      minerData.workerStats.lastShare = timestamp;
+      minerData.workerStats.minDiff = currentDifficulty;
+    }
+  
     if (this.contributions.has(nonce)){
       minerDuplicatedShares.labels(minerId, address).inc();
       throw Error('Duplicate share');
@@ -136,19 +138,18 @@ export class SharesManager {
       minerIsBlockShare.labels(minerId, address).inc();
       report = await templates.submit(minerId, hash, nonce);
     }  
-    const validity = target <= calculateTarget(difficulty);
+    const validity = target <= calculateTarget(currentDifficulty);
     
     if (!validity){
       if (DEBUG) this.monitoring.debug(`SharesManager: Invalid share for target: ${target} for miner ${minerId}`);
       minerInvalidShares.labels(minerId, address).inc();
       throw Error('Invalid share');
     } 
-
-    this.contributions.set(nonce, { address, difficulty, timestamp, minerId });
+  
+    this.contributions.set(nonce, { address, difficulty: currentDifficulty, timestamp, minerId });
     if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);
-
-    if (report) minerData.workerStats.blocksFound++;
-
+  
+    if (report && minerData) minerData.workerStats.blocksFound++;
   }
 
   startStatsThread() {
@@ -218,4 +219,50 @@ export class SharesManager {
     this.contributions.clear();
     return contributions;
   }
+
+  startVardiffThread(sharesPerMin: number, varDiffStats: boolean, clampPow2: boolean) {
+    setInterval(() => {
+      const now = Date.now();
+  
+      this.miners.forEach(minerData => {
+        const stats = minerData.workerStats;
+        const elapsedMinutes = (now - stats.varDiffStartTime) / 60000; // Convert ms to minutes
+        if (elapsedMinutes < 1) return;
+  
+        const sharesFound = stats.varDiffSharesFound;
+        const shareRate = sharesFound / elapsedMinutes;
+        const targetRate = sharesPerMin;
+  
+        if (DEBUG) this.monitoring.debug(`shareManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedMinutes: ${elapsedMinutes}, shareRate: ${shareRate}, targetRate: ${targetRate}`);
+  
+        if (shareRate > targetRate * 1.2) {
+          let newDiff = stats.minDiff * 1.5;
+          if (clampPow2) {
+            newDiff = Math.pow(2, Math.floor(Math.log2(newDiff)));
+          }
+          stats.minDiff = newDiff;
+          if (DEBUG) this.monitoring.debug(`shareManager: VarDiff - Increasing difficulty for ${stats.workerName} to ${newDiff}`);
+        } else if (shareRate < targetRate * 0.8) {
+          let newDiff = stats.minDiff / 1.5;
+          if (clampPow2) {
+            newDiff = Math.pow(2, Math.ceil(Math.log2(newDiff)));
+          }
+          if (newDiff < 1) {
+            newDiff = 1;
+          }
+          stats.minDiff = newDiff;
+          if (DEBUG) this.monitoring.debug(`shareManager: VarDiff - Decreasing difficulty for ${stats.workerName} to ${newDiff}`);
+        }
+  
+        stats.varDiffSharesFound = 0;
+        stats.varDiffStartTime = now;
+  
+        if (varDiffStats) {
+          this.monitoring.log(`shareManager: VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsed: ${elapsedMinutes.toFixed(2)}, shareRate: ${shareRate.toFixed(2)}, newDiff: ${stats.minDiff}`);
+        }
+      });
+    }, 60000); // Run every minute
+  }
+  
+
 }

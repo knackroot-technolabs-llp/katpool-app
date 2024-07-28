@@ -42,7 +42,7 @@ if (!kaspoolPshGw) {
 const treasury = new Treasury(rpc, serverInfo.networkId, treasuryPrivateKey, config.treasury.fee);
 const templates = new Templates(rpc, treasury.address, config.stratum.templates.cacheSize);
 
-const stratum = new Stratum(templates, config.stratum.port, config.stratum.difficulty, kaspoolPshGw, treasury.address);
+const stratum = new Stratum(templates, config.stratum.port, config.stratum.difficulty, kaspoolPshGw, treasury.address, config.stratum.sharesPerMinute);
 const pool = new Pool(treasury, stratum, stratum.sharesManager );
 
 

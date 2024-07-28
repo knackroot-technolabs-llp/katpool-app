@@ -15,10 +15,10 @@ export const poolHashRateGauge = new Gauge({
   labelNames: ['pool_address'],
 });
 
-export const minerShares = new Gauge({
-  name: 'miner_shares',
-  help: 'Shares per miner',
-  labelNames: ['miner_id', 'wallet_address'],
+export const minerjobSubmissions = new Gauge({
+  name: 'miner_job_submissions',
+  help: 'Job submitted per miner',
+  labelNames: ['miner_id'],
 });
 
 export const minerAddedShares = new Gauge({
@@ -66,5 +66,11 @@ export const paidBlocksGauge = new Gauge({
 export const jobsNotFound = new Gauge({
   name: 'jobs_not_found',
   help: 'Total jobs not Found for registered template',
+  labelNames: ['miner_id', 'pool_address'],
+});
+
+export const varDiff = new Gauge({
+  name: 'variable_difficulty',
+  help: 'show the difficulty per miner over time',
   labelNames: ['miner_id', 'pool_address'],
 });

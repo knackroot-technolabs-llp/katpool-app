@@ -76,7 +76,6 @@ export default class Stratum extends EventEmitter {
       }
       case 'mining.authorize': {
         const [address, name] = request.params[0].split('.');
-        if (DEBUG) this.monitoring.debug(`Stratum: Mining Authorized - Address: ${address}, Worker Name: ${name}`);
         if (!Address.validate(address)) throw Error('Invalid address');
         const worker: Worker = { address, name };
         if (socket.data.workers.has(worker.name)) throw Error('Worker with duplicate name');
@@ -132,6 +131,7 @@ export default class Stratum extends EventEmitter {
           response.result = false;
         } else {
           const minerId = name; // Use the worker name as minerId or define your minerId extraction logic
+          if (DEBUG) this.monitoring.debug(`Stratum: Submitting Share - Address: ${address}, Worker Name: ${name}`);
           await this.sharesManager.addShare(minerId, worker.address, hash, socket.data.difficulty, BigInt('0x' + request.params[2]), this.templates).catch(err => {
             if (!(err instanceof Error)) throw err;
             switch (err.message) {

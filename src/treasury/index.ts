@@ -34,11 +34,10 @@ export default class Treasury extends EventEmitter {
     this.processor.addEventListener('maturity', (e) => {
       // @ts-ignore
       const reward = e.data.value
-      this.monitoring.log(`Treasury: Total Reward:  ${reward}.`);
+      this.monitoring.log(`Treasury: Reward value obtain UTXO processor for every contribution:  ${reward}.`);
       const poolFee = (reward * BigInt(this.fee * 100)) / 10000n
-      this.monitoring.log(`Treasury: Pool Fee:  ${poolFee}.`);
-      this.emit('coinbase', reward - poolFee)     
-      this.emit('revenue', poolFee)
+      this.monitoring.log(`Treasury: Pool Fee calculated for every contribution: ${poolFee}.`);
+      this.emit('coinbase', reward - poolFee, poolFee)     
     })
 
     this.processor.start()

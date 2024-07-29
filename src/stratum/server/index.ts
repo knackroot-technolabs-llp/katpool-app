@@ -1,7 +1,7 @@
 import type { Socket, TCPSocketListener } from 'bun'
 import { parseMessage, type Request, type Response } from './protocol'
 import { Encoding } from '../templates/jobs/encoding'
-import Monitoring from '../../pool/monitoring'
+import Monitoring from '../../monitoring'
 
 export type Worker = {
   address: string,

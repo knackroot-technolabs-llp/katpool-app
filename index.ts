@@ -5,7 +5,7 @@ import Stratum from "./src/stratum";
 import Pool from "./src/pool";
 import config from "./config.json";
 import dotenv from 'dotenv';
-import Monitoring from './src/pool/monitoring'
+import Monitoring from './src/monitoring'
 
 export let DEBUG = 0
 if (process.env.DEBUG == "1") {

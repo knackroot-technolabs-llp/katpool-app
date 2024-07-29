@@ -3,7 +3,7 @@ import { calculateTarget } from "../../wasm/kaspa";
 import { Pushgateway, Gauge } from 'prom-client';
 import type { RegistryContentType } from 'prom-client';
 import { stringifyHashrate, getAverageHashrateGHs } from './utils';
-import Monitoring from '../pool/monitoring'
+import Monitoring from '../monitoring'
 import { DEBUG } from '../../index'
 import { minerHashRateGauge, poolHashRateGauge , minerAddedShares, minerIsBlockShare, minerInvalidShares, minerStaleShares, minerDuplicatedShares, varDiff } from '../prometheus'
 
@@ -261,7 +261,7 @@ export class SharesManager {
           this.monitoring.log(`shareManager: VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsed: ${elapsedMinutes.toFixed(2)}, shareRate: ${shareRate.toFixed(2)}, newDiff: ${stats.minDiff}`);
         }
       });
-    }, 60000); // Run every minute
+    }, 600000); // Run every 10 minute
   }
   
 

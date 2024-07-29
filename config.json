@@ -9,8 +9,8 @@
     "templates": {
       "cacheSize": 300
     },
-    "difficulty": 10,
-    "sharesPerMinute": 5
+    "difficulty": 20,
+    "sharesPerMinute": 2
 
   },
   "treasury": {

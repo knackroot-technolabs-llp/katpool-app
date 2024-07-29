@@ -2,7 +2,7 @@ import type { IBlock, RpcClient } from "../../../wasm/kaspa"
 import { Header, PoW } from "../../../wasm/kaspa"
 import Jobs from "./jobs"
 import { minedBlocksGauge, paidBlocksGauge } from '../../prometheus';
-import Monitoring from '../../pool/monitoring'
+import Monitoring from '../../monitoring'
 import { DEBUG } from '../../../index'
   
 

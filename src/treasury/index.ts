@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import Monitoring from '../pool/monitoring';
+import Monitoring from '../monitoring';
 import { PrivateKey, UtxoProcessor, UtxoContext, type RpcClient } from "../../wasm/kaspa"
 
 export default class Treasury extends EventEmitter {

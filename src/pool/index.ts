@@ -1,7 +1,7 @@
 import type Treasury from '../treasury';
 import type Stratum from '../stratum';
 import Database from './database';
-import Monitoring from './monitoring';
+import Monitoring from '../monitoring';
 import { sompiToKaspaStringWithSuffix, type IPaymentOutput } from '../../wasm/kaspa';
 import { DEBUG } from "../../index"
 import { SharesManager } from '../stratum/sharesManager'; // Import SharesManager

@@ -12,6 +12,9 @@ In the Stratum app for a Kaspa mining pool, several components work together to 
 
 5. **Works and Maps**: These are used to track the progress of each miner. The `works` map keeps track of the current difficulty and shares submitted by each miner.
 
+## Download Kaspa WASM
+You can download the latest form here: https://kaspa.aspectron.org/nightly/downloads/ move nodejs to the repo folder as wasm
+
 ## How to install
 To install dependencies:
 
@@ -37,7 +40,18 @@ CREATE TABLE wallet_total (
 To run:
 
 ```bash
-TREASURY_PRIVATE_KEY=<private_key> DATABASE_URL='postgresql://<psql_user>>:<psql_password>@<psql_hostname>:5432/<psql_db>' bun run index.ts
+TREASURY_PRIVATE_KEY=<private_key> DATABASE_URL='postgresql://<psql_user>:<psql_password>@<psql_hostname>:5432/<psql_db>' bun run index.ts
+```
+
+## Docker Compose
+create .env file
+
+```
+TREASURY_PRIVATE_KEY=<private key>
+POSTGRES_USER=<db-user>
+POSTGRES_PASSWORD=<db-passwd>
+POSTGRES_DB=<db-name>
+DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@kaspool-db:5432/${POSTGRES_DB}"
 ```
 
 ## Additonal notes

@@ -15,6 +15,7 @@ COPY package.json bun.lockb ./
 
 # Install dependencies
 RUN bun install
+RUN bun upgrade --canary
 
 # Copy the rest of your application code to the working directory
 COPY . .

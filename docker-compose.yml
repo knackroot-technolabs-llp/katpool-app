@@ -1,10 +1,8 @@
-version: '0.1'
+# version 0.3
 services:
   postgres:
     image: postgres
-    container_name: my_postgres
-#    ports:
-#      - "5432:5432"
+    container_name: kaspool-db
     networks:
       - backend    
     volumes:
@@ -12,10 +10,10 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     env_file:
       - .env
-    restart: always      
-      
+    restart: always
+
   kaspool-app:
-    image: kaspool-app:0.1
+    image: kaspool-app:0.46aragon
     container_name: kaspool-app
     depends_on:
       - postgres
@@ -26,7 +24,7 @@ services:
       - backend        
     env_file:
       - .env
-    restart: always      
+    restart: always
 
   kaspool-monitor:
     image: kaspool-monitor:0.1
@@ -34,7 +32,6 @@ services:
     depends_on:
       - postgres
     ports:
-#      - "9300:9300"
       - "9301:9301"
     networks:
       - backend       
@@ -44,7 +41,9 @@ services:
 
   prometheus:
     image: prom/prometheus
-    container_name: prometheus
+    container_name: kaspool-prmths
+    depends_on:
+      - kaspool-app    
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
@@ -54,6 +53,18 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
     restart: always
-    
+
+  pushgateway:
+    image: prom/pushgateway
+    container_name: kaspool-pushgateway
+    depends_on:
+      - kaspool-app     
+    ports:
+      - "9092:9091"
+    networks:
+      - backend
+    restart: always
+
 networks:
   backend:
+    driver: bridge

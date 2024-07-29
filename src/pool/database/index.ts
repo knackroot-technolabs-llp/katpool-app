@@ -4,6 +4,12 @@ type Miner = {
   balance: bigint;
 };
 
+type MinerBalanceRow = {
+  miner_id: string;
+  wallet: string;
+  balance: string;
+};
+
 const defaultMiner: Miner = {
   balance: 0n,
 };
@@ -54,20 +60,18 @@ export default class Database {
   }
   
 
-  async resetBalance(minerId: string, wallet: string) {
-    const key = `${minerId}_${wallet}`;
-  
-    await this.client.query('BEGIN');
-    try {
-      await this.client.query('UPDATE miners_balance SET balance = $1 WHERE id = $2', [0n, key]);
-      await this.client.query('COMMIT');
-      return true;
-    } catch (e) {
-      await this.client.query('ROLLBACK');
-      throw e;
-    }
+  async resetBalanceByAddress(wallet: string) {
+    await this.client.query('UPDATE miners_balance SET balance = $1 WHERE wallet = $2', [0n, wallet]);
   }
   
+  async getAllBalances() {
+    const res = await this.client.query('SELECT miner_id, wallet, balance FROM miners_balance');
+    return res.rows.map((row: MinerBalanceRow) => ({
+      minerId: row.miner_id,
+      address: row.wallet,
+      balance: BigInt(row.balance)
+    }));
+  }
 
   async getUser(minerId: string, wallet: string) {
     const key = `${minerId}_${wallet}`;

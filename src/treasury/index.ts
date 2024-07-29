@@ -1,7 +1,6 @@
 import { EventEmitter } from 'events'
 import Monitoring from '../pool/monitoring';
-import Database from '../pool/database'
-import { PrivateKey, UtxoProcessor, UtxoContext, type RpcClient, type IPaymentOutput, createTransactions } from "../../wasm/kaspa"
+import { PrivateKey, UtxoProcessor, UtxoContext, type RpcClient } from "../../wasm/kaspa"
 
 export default class Treasury extends EventEmitter {
   privateKey: PrivateKey
@@ -16,34 +15,16 @@ export default class Treasury extends EventEmitter {
     
     this.privateKey = new PrivateKey(privateKey)
     this.address = (this.privateKey.toAddress(networkId)).toString()
-    console.log("treasury: treasury address: ",this.address)
     this.processor = new UtxoProcessor({ rpc, networkId })
     this.context = new UtxoContext({ processor: this.processor })
     this.fee = fee
     this.monitoring = new Monitoring();
+    this.monitoring.log(`Treasury: Pool Wallet Address: " ${this.address}`)
 
     this.registerProcessor()
   }
   
-  async send (outputs: IPaymentOutput[]) {
-    this.monitoring.log(`Treasury: Send Outputs:`)
-    console.log(outputs)
-    const { transactions, summary } = await createTransactions({
-      entries: this.context,
-      outputs,
-      changeAddress: this.address,
-      priorityFee: 0n
-    })
-    this.monitoring.log(`Treasury: Signing and Submitting Transaction`)
-    for (const transaction of transactions) {
-      await transaction.sign([ this.privateKey ])
-      await transaction.submit(this.processor.rpc)
-    }
 
-    this.monitoring.log(`Treasury: Transaction ID: " ${summary.finalTransactionId}`)
-    return summary.finalTransactionId
-  }
-  
   private registerProcessor () {
     this.processor.addEventListener("utxo-proc-start", async () => {
       await this.context.clear()

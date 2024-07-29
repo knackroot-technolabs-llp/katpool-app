@@ -2,12 +2,17 @@ import { RpcClient, Encoding, Resolver } from "./wasm/kaspa";
 import Treasury from "./src/treasury";
 import Templates from "./src/stratum/templates";
 import Stratum from "./src/stratum";
-import { SharesManager } from "./src/stratum/sharesManager";
 import Pool from "./src/pool";
 import config from "./config.json";
 import dotenv from 'dotenv';
+import Monitoring from './src/monitoring'
 
-console.log("Main: Starting kaspool App")
+export let DEBUG = 0
+if (process.env.DEBUG == "1") {
+  DEBUG = 1;
+}
+const monitoring = new Monitoring();
+monitoring.log(`Main: Starting kaspool App`)
 
 dotenv.config();
 
@@ -18,7 +23,7 @@ const rpc = new RpcClient({
 });
 await rpc.connect();
 
-console.log("Main: RPC connexion started")
+monitoring.log(`Main: RPC connexion started`)
 
 const serverInfo = await rpc.getServerInfo();
 if (!serverInfo.isSynced || !serverInfo.hasUtxoIndex) throw Error('Provided node is either not synchronized or lacks the UTXO index.');
@@ -28,6 +33,7 @@ if (!treasuryPrivateKey) {
   throw new Error('Environment variable TREASURY_PRIVATE_KEY is not set.');
 }
 
+
 const kaspoolPshGw = process.env.PUSHGATEWAY;
 if (!kaspoolPshGw) {
   throw new Error('Environment variable PUSHGATEWAY is not set.');
@@ -36,9 +42,7 @@ if (!kaspoolPshGw) {
 const treasury = new Treasury(rpc, serverInfo.networkId, treasuryPrivateKey, config.treasury.fee);
 const templates = new Templates(rpc, treasury.address, config.stratum.templates.cacheSize);
 
-const sharesManager = new SharesManager(treasury.address,kaspoolPshGw); // Create an instance of SharesManager
-
-const stratum = new Stratum(templates, config.stratum.port, config.stratum.difficulty, kaspoolPshGw, treasury.address);
-const pool = new Pool(treasury, stratum, sharesManager );
+const stratum = new Stratum(templates, config.stratum.port, config.stratum.difficulty, kaspoolPshGw, treasury.address, config.stratum.sharesPerMinute);
+const pool = new Pool(treasury, stratum, stratum.sharesManager );
 
 

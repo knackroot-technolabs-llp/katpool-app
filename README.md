@@ -52,6 +52,7 @@ POSTGRES_USER=<db-user>
 POSTGRES_PASSWORD=<db-passwd>
 POSTGRES_DB=<db-name>
 DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@kaspool-db:5432/${POSTGRES_DB}"
+DEBUG=1
 ```
 
 ## Additonal notes
@@ -302,7 +303,7 @@ The `Pool` class is designed to manage the interactions between the mining pool'
 - **`Treasury`** and **`Stratum`**: Type imports for interacting with the pool's treasury and stratum components.
 - **`Database`**: Handles database operations.
 - **`Monitoring`**: Manages logging and monitoring of pool activities.
-- **`sompiToKaspaStringWithSuffix`, **`IPaymentOutput`**: Utility functions and types from the Kaspa WebAssembly module.
+- **`sompiToKaspaStringWithSuffix`**
 
 ### Class `Pool`
 
@@ -316,25 +317,11 @@ The `Pool` class is designed to manage the interactions between the mining pool'
 - **Parameters**: `treasury`, `stratum`
 - **Function**:
   - Initializes the `treasury`, `stratum`, `database`, and `monitoring` properties.
-  - Sets up event listeners for miner subscriptions (`subscription`), coinbase transactions (`coinbase`), and revenue (`revenue`).
+  - Sets up event listeners for miner subscriptions (`subscription`), coinbase transactions (`coinbase`).
 
 #### Methods
 
-1. **`revenuize(amount: bigint)`**:
-   - Adds the generated revenue to the treasury's address balance.
-   - Logs the revenue generation event.
-
-2. **`distribute(amount: bigint)`**:
-   - **Purpose**: Distributes rewards to miners based on their contributions.
-   - **Process**:
-     - Collects contributions from the `stratum`.
-     - Calculates the total work done by miners.
-     - Logs the distribution event.
-     - Distributes the rewards proportionally based on the miners' contributions.
-     - Resets the balance for miners who have reached a certain threshold (`1e8`).
-     - Sends the payments and logs the successful distribution.
-
-3. **`allocate(amount: bigint)`**:
+1. **`allocate(amount: bigint)`**:
    - **Purpose**: Allocates rewards to miners based on their contributions (similar to `distribute` but without resetting balances).
    - **Process**:
      - Collects contributions from the `stratum`.

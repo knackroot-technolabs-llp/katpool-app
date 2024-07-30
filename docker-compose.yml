@@ -13,26 +13,31 @@ services:
     restart: always
 
   kaspool-app:
-    image: kaspool-app:0.60vardiff
+    image: kaspool-app:0.61vardiff
     container_name: kaspool-app
     depends_on:
       - postgres
+      - kaspool-monitor
+      - pushgateway
     ports:
       - "7777:7777"
       - "9100:9100"
     networks:
-      - backend        
+      - backend
+    volumes:
+      - ./config:/app/config          
     env_file:
       - .env
     restart: always
 
   kaspool-monitor:
-    image: kaspool-monitor:0.1
+    image: kaspool-monitor:0.2
     container_name: kaspool-monitor
     depends_on:
       - postgres
     ports:
       - "9301:9301"
+      - "9302:9302"
     networks:
       - backend       
     env_file:
@@ -42,8 +47,6 @@ services:
   prometheus:
     image: prom/prometheus
     container_name: kaspool-prmths
-    depends_on:
-      - kaspool-app    
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
@@ -56,11 +59,7 @@ services:
 
   pushgateway:
     image: prom/pushgateway
-    container_name: kaspool-pushgateway
-    depends_on:
-      - kaspool-app     
-    ports:
-      - "9092:9091"
+    container_name: kaspool-pushgateway   
     networks:
       - backend
     restart: always

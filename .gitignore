@@ -5,3 +5,4 @@ bun*
 .secrets
 .env
 postgres*
+db_backup*

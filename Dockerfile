@@ -22,7 +22,6 @@ COPY . .
 
 # Expose the port your app runs on
 EXPOSE 7777
-EXPOSE 9100
 
 # Start the application
 CMD ["bun", "run", "index.ts"]

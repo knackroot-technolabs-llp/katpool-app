@@ -73,7 +73,7 @@ services:
       - kaspool-monitor    
 
   postgres-backup:
-    image: kaspool-backup:0.1
+    image: kaspool-backup:0.4
     container_name: kaspool-backup
     depends_on:
       - postgres

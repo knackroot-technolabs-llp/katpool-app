@@ -7,7 +7,7 @@ export default class Jobs {
   }
 
   deriveId (hash: string) {
-    const id = this.lastId == 99 ? 1 : (this.lastId + 1)
+    const id = this.lastId == 255 ? 1 : (this.lastId + 1)
 
     this.jobs.set(id.toString(), hash)
     this.lastId = id

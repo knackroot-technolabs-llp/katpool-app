@@ -67,7 +67,8 @@ export default class Templates {
       this.templates.set(template.header.hash, [ template, proofOfWork ])
       const id = this.jobs.deriveId(template.header.hash)
 
-      if (DEBUG) this.monitoring.debug(`Templates: templates.size: ${this.templates.size}, cacheSize: ${this.cacheSize}`)
+      //if (DEBUG) this.monitoring.debug(`Templates: templates.size: ${this.templates.size}, cacheSize: ${this.cacheSize}`)
+
       if (this.templates.size > this.cacheSize) {
         this.templates.delete(this.templates.entries().next().value[0])
         this.jobs.expireNext()

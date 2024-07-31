@@ -13,7 +13,7 @@ services:
     restart: always
 
   kaspool-app:
-    image: kaspool-app:0.61vardiff
+    image: kaspool-app:0.62vardiff
     container_name: kaspool-app
     depends_on:
       - postgres

@@ -7,10 +7,14 @@ export default class Jobs {
   }
 
   deriveId (hash: string) {
-    this.lastId =+ 1
-    this.jobs.set(this.lastId.toString(), hash)
-    return this.lastId.toString()
+    const id = this.lastId == 6555 ? 1 : (this.lastId + 1)
+
+    this.jobs.set(id.toString(), hash)
+    this.lastId = id
+
+    return id.toString()
   }
+  
 
   expireNext () {
     this.jobs.delete(this.jobs.entries().next().value[0])

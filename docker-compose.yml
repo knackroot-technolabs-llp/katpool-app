@@ -1,4 +1,4 @@
-# version 0.3
+# version 0.4
 services:
   postgres:
     image: postgres
@@ -13,7 +13,7 @@ services:
     restart: always
 
   kaspool-app:
-    image: kaspool-app:0.62vardiff
+    image: kaspool-app:0.63vardiff
     container_name: kaspool-app
     depends_on:
       - postgres
@@ -39,6 +39,17 @@ services:
     env_file:
       - .env
     restart: always
+
+  kaspool-payment:
+    image: kaspool-payment:0.2
+    container_name: kaspool-payment
+    depends_on:
+      - postgres
+    networks:
+      - backend       
+    env_file:
+      - .env
+#    restart: always
 
   prometheus:
     image: prom/prometheus

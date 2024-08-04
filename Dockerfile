@@ -11,7 +11,7 @@ WORKDIR /app
 ENV PATH="/root/.bun/bin:$PATH"
 
 # Copy the package.json and bun.lockb files to the working directory
-COPY package.json bun.lockb ./
+COPY package.json ./
 
 # Install dependencies
 RUN bun install

@@ -6,7 +6,11 @@ The shares are validated, and their difficulty is checked. Valid shares are coun
 
 
 ## Download Kaspa WASM
+** IMPORTANT **
+Before anything, add wasm foolder to the local folder
 You can download the latest form here: https://kaspa.aspectron.org/nightly/downloads/ move nodejs to the repo folder as wasm
+unzip, rename and move `nodejs` that contains `kaspa` and kaspa-dev` to `wasm` folder locally.
+Validate the location with the imports in the code.
 
 ## Docker Compose
 The recommended installation is via docker compose. There are many instances that are required to have a full functionality of the pool solution.
@@ -43,6 +47,7 @@ Crete `postgres_data` folder at the repository root location for the postgres da
 * init.sql: to setup the database the first time it's started
 * nginx.conf
 * config 
+* **wasm** folder must the also available
 
 ### Configuration
 
@@ -67,6 +72,12 @@ After ten minites you should be able to connect to the metrics, received info fo
 * `http://<pool-server>:8080/balance` to see the balance for all miners
 * `http://<pool-server>:8080/total` to see the total been rewarded to the miners ever
 
+
+### Backup
+
+Optionally, you can add a backup process to the DB. Check the ./backup folder.
+You can build the suggested image via `docker build -t kaspool-backup:0.4 .` and uncomment its part in the docker-compose.yml file.
+We recommend to transfer the database dump files to other location as additional protection.
 
 ## How to install locally using bun (not recommended)
 To install dependencies:

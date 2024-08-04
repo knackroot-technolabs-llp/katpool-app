@@ -24,13 +24,14 @@ services:
     networks:
       - backend
     volumes:
-      - ./config:/app/config          
+      - ./config:/app/config 
+      - ./wasm:/app/wasm         
     env_file:
       - .env
     restart: always
 
   kaspool-monitor:
-    image: kaspool-monitor:0.2
+    image: ghcr.io/coinchimp/kaspool-monitor:v2408.1b
     container_name: kaspool-monitor
     depends_on:
       - postgres
@@ -41,10 +42,13 @@ services:
     restart: always
 
   kaspool-payment:
-    image: kaspool-payment:0.2
-    container_name: kaspool-payment
+    image: ghcr.io/coinchimp/kaspool-payment:v2408.1b
+    container_name: kaspool-payment   
     depends_on:
       - postgres
+    volumes:
+      - ./config:/app/config
+      - ./wasm:/app/wasm       
     networks:
       - backend       
     env_file:
@@ -83,18 +87,18 @@ services:
       - prometheus
       - kaspool-monitor    
 
-  postgres-backup:
-    image: kaspool-backup:0.4
-    container_name: kaspool-backup
-    depends_on:
-      - postgres
-    env_file:
-      - .env
-    volumes:
-      - ./backup/files:/backup/files
-    networks:
-      - backend
-    restart: always
+  # postgres-backup:
+  #   image: kaspool-backup:0.4
+  #   container_name: kaspool-backup
+  #   depends_on:
+  #     - postgres
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./backup/files:/backup/files
+  #   networks:
+  #     - backend
+  #   restart: always
 
 networks:
   backend:

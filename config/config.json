@@ -1,9 +1,8 @@
 {
-  "node": "wss://tn11.onargon.com/testnet-11",
   "network" : "testnet-11",
-  "pool_id" : "us01-nachopool1",
+  "pool_id" : "us01-pool1",
   "location" : "us-central",
-  "hostname" : "us01-nachopool1.nachowyborski.xyz",  
+  "hostname" : "us01-coinchimp.xyz",  
   "stratum": {
     "port": 7777,
     "templates": {

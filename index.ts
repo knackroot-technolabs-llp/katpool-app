@@ -38,11 +38,15 @@ monitoring.log(`Main: Starting kaspool App`)
 
 dotenv.config();
 
+const resolverOptions = config.node ? { urls: config.node } : undefined;
+const resolver = new Resolver(resolverOptions);
+
 const rpc = new RpcClient({
-  resolver: new Resolver(),
+  resolver: resolver,
   encoding: Encoding.Borsh,
   networkId: config.network,
 });
+
 await rpc.connect();
 
 monitoring.log(`Main: RPC connexion started`)

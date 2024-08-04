@@ -5,15 +5,16 @@ export default class Jobs {
   getHash (id: string) {
    return this.jobs.get(id)
   }
-
-  deriveId (hash: string) {
-    const id = this.lastId == 99 ? 1 : (this.lastId + 1)
-
-    this.jobs.set(id.toString(), hash)
-    this.lastId = id
-
-    return id.toString()
+//
+  deriveId (hash: string): string {
+    const id = crypto.getRandomValues(Buffer.alloc(2)).toString('hex')
+    if (this.jobs.has(id)) {
+      return this.deriveId(hash)
+    }
+    this.jobs.set(id, hash)
+    return id
   }
+  
 
   expireNext () {
     this.jobs.delete(this.jobs.entries().next().value[0])

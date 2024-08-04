@@ -11,7 +11,7 @@ import { minerjobSubmissions, jobsNotFound } from '../prometheus'
 import Monitoring from '../monitoring/index.ts';
 import { DEBUG } from '../../index'
 import { Mutex } from 'async-mutex'; // Add this import at the top
-
+import { metrics } from '../../index';  
 
 
 
@@ -130,9 +130,9 @@ export default class Stratum extends EventEmitter {
         // Inside the mining.submit case in the onMessage function
         case 'mining.submit': {
           const [address, name] = request.params[0].split('.');
+          metrics.updateGaugeInc(minerjobSubmissions, [name,address]);
           if (DEBUG) this.monitoring.debug(`Stratum: Submitting job for Worker Name: ${name}`);
           const worker = socket.data.workers.get(name);
-          //minerjobSubmissions.labels(name, address).inc();
           if (DEBUG) this.monitoring.debug(`Stratum: Checking worker data on socket for : ${name}`);
           if (!worker || worker.address !== address) {
             if (DEBUG) this.monitoring.debug(`Stratum: Mismatching worker details - Address: ${address}, Worker Name: ${name}`);
@@ -141,9 +141,7 @@ export default class Stratum extends EventEmitter {
           const hash = this.templates.getHash(request.params[1]);
           if (!hash) {
             if (DEBUG) this.monitoring.debug(`Stratum: Job not found - Address: ${address}, Worker Name: ${name}`);
-            jobsNotFound.labels(name, address).inc();
-            response.error = errors['JOB_NOT_FOUND'];
-            response.result = false;
+            metrics.updateGaugeInc(jobsNotFound, [name, address]);
           } 
           else {
             const minerId = name; // Use the worker name as minerId or define your minerId extraction logic

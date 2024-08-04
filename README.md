@@ -1,28 +1,81 @@
 # KASPA Mining Pool using rusty-kaspa WASM
 
-In the Stratum app for a Kaspa mining pool, several components work together to manage and distribute mining tasks (jobs) to miners, collect their work (shares), and validate and submit completed blocks to the Kaspa network. Here’s a simplified explanation of how these components interact:
+Once the RPC connection is established, the pool initializes the treasury, which listens for UTXO events. When these events occur, the treasury processes them to track available funds. Next, templates are fetched and stored to generate job IDs for miners. These jobs are then distributed to miners for processing. Miners connect to the pool via the stratum protocol, subscribing and submitting their work (shares).
 
-1. **Templates**: Templates represent block templates. They are the initial blocks that miners work on. Each template contains information necessary to create a new block.
+The shares are validated, and their difficulty is checked. Valid shares are counted, and blocks found are recorded. The pool uses this data to calculate the total hash rate and the contributions of each miner. Periodically, the pool distributes rewards based on each miner's contribution, allocating payments from the treasury and having them ready for the next payment cycle.
 
-2. **Jobs**: Jobs are specific tasks derived from templates. Each job instructs a miner on what work needs to be done.
-
-3. **PoW (Proof of Work)**: PoW is a system that miners use to prove they have done the computational work. It involves finding a nonce (a number) that, when hashed with the block template, meets a certain difficulty target.
-
-4. **Shares**: Shares are pieces of work submitted by miners. Each share represents an attempt to find a valid nonce for the given job. Not all shares will be valid blocks, but they show that the miner is working.
-
-5. **Works and Maps**: These are used to track the progress of each miner. The `works` map keeps track of the current difficulty and shares submitted by each miner.
 
 ## Download Kaspa WASM
 You can download the latest form here: https://kaspa.aspectron.org/nightly/downloads/ move nodejs to the repo folder as wasm
 
-## How to install
+## Docker Compose
+The recommended installation is via docker compose. There are many instances that are required to have a full functionality of the pool solution.
+
+![internal container design](images/kaspool-internal-container-design.jpg)
+
+### Container Instances
+
+* kaspool-app: main app and object of this repository
+* kaspool-db: postgres DB
+* [kaspool-monitor](https://github.com/coinchimp/kaspool-monitor): taking the initial config from kaspool and sharing miner balances and total to prometheus and via APIs.
+* prometheus: displaying metrics of the pool
+* pushgateway: receiving metrics form kaspool to have them passed to prometheus
+* [kaspool-payment](https://github.com/coinchimp/kaspool-payment) (still under development): taking balances from the database and distibuting payments
+
+### Create env variables
+create .env file
+```
+TREASURY_PRIVATE_KEY=<private key>
+POSTGRES_USER=<db-user>
+POSTGRES_PASSWORD=<db-passwd>
+POSTGRES_DB=<db-name>
+POSTGRES_HOSTNAME='kaspool-db'
+DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@kaspool-db:5432/${POSTGRES_DB}"
+PUSHGATEWAY="http://kaspool-pushgateway:9091"
+DEBUG=1
+```
+For now, all the instances share the same env var. However, in the future, it's better to set the private key to the payment app. kaspool-app instance won't need it.
+
+### requires folders and files
+
+Crete `postgres_data` folder at the repository root location for the postgres data, and make it persistant between restarts, and ensure the following files are present:
+* prometheus.yml: prometheus scrape configuration (you don't need to modify it)
+* init.sql: to setup the database the first time it's started
+* nginx.conf
+* config 
+
+### Configuration
+
+Check `config/config.json` and do the required configurations to your pool
+
+### container images
+
+We are planing to make those images public, but in case you want to do changes to the code and test it, you can create your own local image via:
+```
+docker build -t kaspool-app:0.65 .
+```
+Dockerfile must be present int the same locatino where you are running this command.
+
+### Start abd check the pool
+
+To start the pool, you need to run `docker compose up -d` or the required command depending of your dcker setup
+You can use `docker logs -f kaspool-app` to see the output of your pool instance. We recommned to use DEBUG=1 at the beginning.
+After ten minites you should be able to connect to the metrics, received info fo the state of the treasury and configurations via port 8080 at the following paths
+
+* `http://<pool-server>:8080` it would take you to the promtheus interface. Check the `index.ts` file in `src/prometheus` folder for the metrics.
+* `http://<pool-server>:8080/config` to see the initial config of the pool
+* `http://<pool-server>:8080/balance` to see the balance for all miners
+* `http://<pool-server>:8080/total` to see the total been rewarded to the miners ever
+
+
+## How to install locally using bun (not recommended)
 To install dependencies:
 
 ```bash
 bun install
 ```
 
-## Database
+## How the Database si setup
 We are using Postgres as our database:
 ```sql
 CREATE TABLE miners_balance (
@@ -41,17 +94,6 @@ To run:
 
 ```bash
 TREASURY_PRIVATE_KEY=<private_key> DATABASE_URL='postgresql://<psql_user>:<psql_password>@<psql_hostname>:5432/<psql_db>' bun run index.ts
-```
-
-## Docker Compose
-create .env file
-
-```
-TREASURY_PRIVATE_KEY=<private key>
-POSTGRES_USER=<db-user>
-POSTGRES_PASSWORD=<db-passwd>
-POSTGRES_DB=<db-name>
-DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@kaspool-db:5432/${POSTGRES_DB}"
 ```
 
 ## Additonal notes
@@ -302,7 +344,7 @@ The `Pool` class is designed to manage the interactions between the mining pool'
 - **`Treasury`** and **`Stratum`**: Type imports for interacting with the pool's treasury and stratum components.
 - **`Database`**: Handles database operations.
 - **`Monitoring`**: Manages logging and monitoring of pool activities.
-- **`sompiToKaspaStringWithSuffix`, **`IPaymentOutput`**: Utility functions and types from the Kaspa WebAssembly module.
+- **`sompiToKaspaStringWithSuffix`**
 
 ### Class `Pool`
 
@@ -316,25 +358,11 @@ The `Pool` class is designed to manage the interactions between the mining pool'
 - **Parameters**: `treasury`, `stratum`
 - **Function**:
   - Initializes the `treasury`, `stratum`, `database`, and `monitoring` properties.
-  - Sets up event listeners for miner subscriptions (`subscription`), coinbase transactions (`coinbase`), and revenue (`revenue`).
+  - Sets up event listeners for miner subscriptions (`subscription`), coinbase transactions (`coinbase`).
 
 #### Methods
 
-1. **`revenuize(amount: bigint)`**:
-   - Adds the generated revenue to the treasury's address balance.
-   - Logs the revenue generation event.
-
-2. **`distribute(amount: bigint)`**:
-   - **Purpose**: Distributes rewards to miners based on their contributions.
-   - **Process**:
-     - Collects contributions from the `stratum`.
-     - Calculates the total work done by miners.
-     - Logs the distribution event.
-     - Distributes the rewards proportionally based on the miners' contributions.
-     - Resets the balance for miners who have reached a certain threshold (`1e8`).
-     - Sends the payments and logs the successful distribution.
-
-3. **`allocate(amount: bigint)`**:
+1. **`allocate(amount: bigint)`**:
    - **Purpose**: Allocates rewards to miners based on their contributions (similar to `distribute` but without resetting balances).
    - **Process**:
      - Collects contributions from the `stratum`.

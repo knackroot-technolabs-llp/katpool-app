@@ -4,7 +4,7 @@ import Jobs from "./jobs"
 import { minedBlocksGauge, paidBlocksGauge } from '../../prometheus';
 import Monitoring from '../../monitoring'
 import { DEBUG } from '../../../index'
-  
+import { metrics } from '../../../index';   
 
 export default class Templates {
   private rpc: RpcClient
@@ -43,10 +43,10 @@ export default class Templates {
       block: template,
       allowNonDAABlocks: false
     })
-    minedBlocksGauge.labels(minerId, this.address).inc();
+    metrics.updateGaugeInc(minedBlocksGauge, [minerId, this.address]);
     
     if (report.report.type == "success") {
-      paidBlocksGauge.labels(minerId, this.address).inc();
+      metrics.updateGaugeInc(paidBlocksGauge, [minerId, this.address]);
     }
     if (DEBUG) this.monitoring.debug(`Templates: the block has been ${report.report.type}, reason: ${report.report.reason}`)
 
@@ -66,6 +66,8 @@ export default class Templates {
       const proofOfWork = new PoW(template.header)
       this.templates.set(template.header.hash, [ template, proofOfWork ])
       const id = this.jobs.deriveId(template.header.hash)
+
+      //if (DEBUG) this.monitoring.debug(`Templates: templates.size: ${this.templates.size}, cacheSize: ${this.cacheSize}`)
 
       if (this.templates.size > this.cacheSize) {
         this.templates.delete(this.templates.entries().next().value[0])

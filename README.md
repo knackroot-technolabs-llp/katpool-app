@@ -11,7 +11,7 @@ You can download the latest form here: https://kaspa.aspectron.org/nightly/downl
 ## Docker Compose
 The recommended installation is via docker compose. There are many instances that are required to have a full functionality of the pool solution.
 
-[internal container design](images/kaspool-internal-container-design.jpg)
+![internal container design](images/kaspool-internal-container-design.jpg)
 
 ### Container Instances
 

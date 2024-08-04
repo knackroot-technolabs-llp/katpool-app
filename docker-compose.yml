@@ -13,7 +13,7 @@ services:
     restart: always
 
   kaspool-app:
-    image: kaspool-app:0.63vardiff
+    image: ghcr.io/coinchimp/kaspool-app:v2408.1b
     container_name: kaspool-app
     depends_on:
       - postgres

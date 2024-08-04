@@ -9,7 +9,6 @@ env:
 
 jobs:
   build_and_publish:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -23,4 +22,16 @@ jobs:
         run: docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} .
         
       - name: Docker Push
-        run: docker push  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Make Image Public
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          IMAGE_NAME="${{ github.repository }}:v2408.1b"
+          IMAGE_ID=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/users/coinchimp/packages/container/${{ github.repository }}/versions | jq -r '.[0].id')
+          curl -X PATCH \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            https://api.github.com/users/coinchimp/packages/container/${{ github.repository }}/versions/$IMAGE_ID \
+            -d '{"visibility":"public"}'

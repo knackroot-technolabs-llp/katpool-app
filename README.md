@@ -53,13 +53,14 @@ Crete `postgres_data` folder at the repository root location for the postgres da
 
 Check `config/config.json` and do the required configurations to your pool
 
-### container images
+### Container Images
 
-We are planing to make those images public, but in case you want to do changes to the code and test it, you can create your own local image via:
+We have added public images to docker-compose.yml to make ieasier the deployment, but in case you want to do changes to the code and test it, you can create your own local image via:
 ```
 docker build -t kaspool-app:0.65 .
 ```
-Dockerfile must be present int the same locatino where you are running this command.
+Dockerfile must be present int the same location where you are running this command.
+remember to modify docker-image.yml with your own image.
 
 ### Start abd check the pool
 

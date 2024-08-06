@@ -10,7 +10,7 @@
     "templates": {
       "cacheSize": 300
     },
-    "difficulty": 20,
+    "difficulty": 4,
     "sharesPerMinute": 2
 
   },

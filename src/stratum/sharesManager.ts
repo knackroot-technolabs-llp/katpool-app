@@ -257,6 +257,7 @@ export class SharesManager {
   
         if (varDiffStats) {
           this.monitoring.log(`shareManager: VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsed: ${elapsedMinutes.toFixed(2)}, shareRate: ${shareRate.toFixed(2)}, newDiff: ${stats.minDiff}`);
+          metrics.updateGaugeValue(varDiff, [stats.workerName], stats.minDiff);
         }
       });
     }, 600000); // Run every 10 minute

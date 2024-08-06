@@ -53,7 +53,7 @@ services:
       - backend       
     env_file:
       - .env
-#    restart: always
+    restart: always
 
   prometheus:
     image: prom/prometheus
@@ -87,6 +87,7 @@ services:
     depends_on:
       - prometheus
       - kaspool-monitor    
+    restart: always  
 
   # postgres-backup:
   #   image: kaspool-backup:0.4

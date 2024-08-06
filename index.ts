@@ -42,8 +42,8 @@ const resolverOptions = config.node ? { urls: config.node } : undefined; //disab
 const resolver = new Resolver(resolverOptions); //disabled for now
 
 const rpc = new RpcClient({
-  //resolver: resolver,
-  resolver: new Resolver(),
+  resolver: resolver,
+  //resolver: new Resolver(),
   encoding: Encoding.Borsh,
   networkId: config.network,
 });

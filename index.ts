@@ -18,7 +18,7 @@ if (process.env.DEBUG == "1") {
 
 // Send config.json to API server
 async function sendConfig() {
-  if (DEBUG) monitoring.log(`Main: Trying to send config to kaspool-monitor`);
+  if (DEBUG) monitoring.debug(`Main: Trying to send config to kaspool-monitor`);
   try {
     const configPath = path.resolve('./config/config.json');
     const configData = fs.readFileSync(configPath, 'utf-8');
@@ -40,6 +40,10 @@ dotenv.config();
 
 const resolverOptions = config.node ? { urls: config.node } : undefined; //disabled for now
 const resolver = new Resolver(resolverOptions); //disabled for now
+if (DEBUG) { 
+  monitoring.debug(`Main: Resolver Options: `);
+  console.log(resolverOptions)
+}
 
 const rpc = new RpcClient({
   resolver: resolver,

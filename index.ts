@@ -38,11 +38,12 @@ monitoring.log(`Main: Starting kaspool App`)
 
 dotenv.config();
 
-const resolverOptions = config.node ? { urls: config.node } : undefined;
-const resolver = new Resolver(resolverOptions);
+const resolverOptions = config.node ? { urls: config.node } : undefined; //disabled for now
+const resolver = new Resolver(resolverOptions); //disabled for now
 
 const rpc = new RpcClient({
-  resolver: resolver,
+  //resolver: resolver,
+  resolver: new Resolver(),
   encoding: Encoding.Borsh,
   networkId: config.network,
 });

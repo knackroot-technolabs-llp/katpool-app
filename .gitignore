@@ -5,4 +5,5 @@ bun*
 .secrets
 .env
 postgres*
+prometheus_data
 db_backup*

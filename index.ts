@@ -47,10 +47,7 @@ if (DEBUG) {
 
 const rpc = new RpcClient({
   //resolver: resolver,
-  resolver: new Resolver({urls: [ "https://us-east.nachowyborski.xyz/", "https://us-west.nachowyborski.xyz/",
-    "https://de.nachowyborksi.xyz/", "https://turkey.nachowyborski.xyz/", "https://india.nachowyborski.xyz/",
-    "https://singapore.nachowyborski.xyz/", "https://brazil.nachowyborski.xyz/", "https://italy.nachowyborski.xyz/"
-  ]}),
+  resolver: new Resolver(),
   encoding: Encoding.Borsh,
   networkId: config.network,
 });

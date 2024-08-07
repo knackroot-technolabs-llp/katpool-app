@@ -39,24 +39,15 @@ monitoring.log(`Main: Starting kaspool App`)
 
 dotenv.config();
 
-const resolverOptions = config.node ? { urls: config.node } : undefined;
-//const resolver = resolverOptions ? new Resolver(resolverOptions) : new Resolver();
-
-if (DEBUG) { 
-  monitoring.debug(`Main: Resolver Options: ${JSON.stringify(resolverOptions)}`);
-}
-
 monitoring.log(`Main: network: ${config.network}`);
 
 const rpc = new RpcClient({
-  resolver: resolverOptions ? new Resolver(resolverOptions) : new Resolver(),
+  resolver: new Resolver({
+    urls: config.node
+  }),
   encoding: Encoding.Borsh,
   networkId: config.network,
 });
-
-if (DEBUG) { 
-  monitoring.debug(`Main: Resolver urls: ${JSON.stringify(rpc.resolver?.urls)}`);
-}
 
 await rpc.connect();
 

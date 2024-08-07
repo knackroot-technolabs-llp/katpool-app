@@ -6,10 +6,11 @@ import Pool from "./src/pool";
 import config from "./config/config.json";
 import dotenv from 'dotenv';
 import Monitoring from './src/monitoring'
-import { PushMetrics }  from "./src/prometheus";
+import { PushMetrics } from "./src/prometheus";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import { ExitStatus } from "typescript";
 
 export let DEBUG = 0
 if (process.env.DEBUG == "1") {
@@ -38,23 +39,28 @@ monitoring.log(`Main: Starting kaspool App`)
 
 dotenv.config();
 
-const resolverOptions = config.node ? { urls: config.node } : undefined; //disabled for now
-const resolver = new Resolver(resolverOptions); //disabled for now
+const resolverOptions = config.node ? { urls: config.node } : undefined;
+//const resolver = resolverOptions ? new Resolver(resolverOptions) : new Resolver();
+
 if (DEBUG) { 
-  monitoring.debug(`Main: Resolver Options: `);
-  console.log(resolverOptions)
+  monitoring.debug(`Main: Resolver Options: ${JSON.stringify(resolverOptions)}`);
 }
 
+monitoring.log(`Main: network: ${config.network}`);
+
 const rpc = new RpcClient({
-  //resolver: resolver,
-  resolver: new Resolver(),
+  resolver: resolverOptions ? new Resolver(resolverOptions) : new Resolver(),
   encoding: Encoding.Borsh,
   networkId: config.network,
 });
 
+if (DEBUG) { 
+  monitoring.debug(`Main: Resolver urls: ${JSON.stringify(rpc.resolver?.urls)}`);
+}
+
 await rpc.connect();
 
-monitoring.log(`Main: RPC connexion started`)
+monitoring.log(`Main: RPC connection started`)
 
 const serverInfo = await rpc.getServerInfo();
 if (!serverInfo.isSynced || !serverInfo.hasUtxoIndex) throw Error('Provided node is either not synchronized or lacks the UTXO index.');
@@ -77,7 +83,7 @@ const treasury = new Treasury(rpc, serverInfo.networkId, treasuryPrivateKey, con
 const templates = new Templates(rpc, treasury.address, config.stratum.templates.cacheSize);
 
 const stratum = new Stratum(templates, config.stratum.port, config.stratum.difficulty, kaspoolPshGw, treasury.address, config.stratum.sharesPerMinute);
-const pool = new Pool(treasury, stratum, stratum.sharesManager );
+const pool = new Pool(treasury, stratum, stratum.sharesManager);
 
 
 

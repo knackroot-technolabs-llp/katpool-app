@@ -88,7 +88,7 @@ export class PushMetrics {
     this.pushGatewayUrl = pushGatewayUrl;
     this.pushGateway = new Pushgateway<RegistryContentType>(pushGatewayUrl);
     this.monitoring = new Monitoring();
-    setInterval(() => this.pushMetrics(), 60000); // Push metrics every 10 minutes
+    setInterval(() => this.pushMetrics(), 60000); // Push metrics every 1 minute
   }
 
   async pushMetrics() {

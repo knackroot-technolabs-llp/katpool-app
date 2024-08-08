@@ -10,7 +10,7 @@ import { PushMetrics } from "./src/prometheus";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
-import { ExitStatus } from "typescript";
+import { ExitStatus, getParsedCommandLineOfConfigFile } from "typescript";
 
 export let DEBUG = 0
 if (process.env.DEBUG == "1") {
@@ -42,9 +42,7 @@ dotenv.config();
 monitoring.log(`Main: network: ${config.network}`);
 
 const rpc = new RpcClient({
-  resolver: new Resolver({
-    urls: config.node
-  }),
+  resolver: new Resolver(),
   encoding: Encoding.Borsh,
   networkId: config.network,
 });

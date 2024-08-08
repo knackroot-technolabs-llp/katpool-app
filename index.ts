@@ -42,7 +42,9 @@ dotenv.config();
 monitoring.log(`Main: network: ${config.network}`);
 
 const rpc = new RpcClient({
-  resolver: new Resolver(),
+  resolver: new Resolver({
+    urls : config.node
+  }),
   encoding: Encoding.Borsh,
   networkId: config.network,
 });

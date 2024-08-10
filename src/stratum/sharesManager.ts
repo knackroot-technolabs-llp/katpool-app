@@ -30,6 +30,7 @@ export interface WorkerStats {
   varDiffSharesFound: number;
   varDiffWindow: number;
   minDiff: number;
+  recentShares: { timestamp: number, difficulty: number }[];
 }
 
 type MinerData = {
@@ -74,7 +75,8 @@ export class SharesManager {
         varDiffStartTime: Date.now(),
         varDiffSharesFound: 0,
         varDiffWindow: 0,
-        minDiff: 1 // Set to initial difficulty
+        minDiff: 1, // Set to initial difficulty
+        recentShares: [] // Initialize recentShares array
       };
       minerData.workerStats = workerStats;
       if (DEBUG) this.monitoring.debug(`SharesManager: Created new worker stats for ${workerName}`);
@@ -111,7 +113,8 @@ export class SharesManager {
           varDiffStartTime: Date.now(),
           varDiffSharesFound: 0,
           varDiffWindow: 0,
-          minDiff: currentDifficulty
+          minDiff: currentDifficulty,
+          recentShares: [] // Initialize recentShares array
         }
       });
     } else {
@@ -119,7 +122,12 @@ export class SharesManager {
       minerData.workerStats.varDiffSharesFound++;
       minerData.workerStats.lastShare = timestamp;
       minerData.workerStats.minDiff = currentDifficulty;
+      minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty }); // Add the share to recentShares
     }
+
+    // Clean up old shares outside the window
+    const windowSize = 10 * 60 * 1000; // 10 minutes window
+    minerData!.workerStats.recentShares = minerData!.workerStats.recentShares.filter(share => Date.now() - share.timestamp <= windowSize);
 
     if (this.contributions.has(nonce)) {
       metrics.updateGaugeInc(minerDuplicatedShares, [minerId, address]);
@@ -192,20 +200,27 @@ export class SharesManager {
 
   calcHashRates() {
     let totalHashRate = 0;
+    const windowSize = 10 * 60 * 1000; // 10 minutes window
+
     this.miners.forEach((minerData, address) => {
-      const timeDifference = (Date.now() - minerData.workerStats.startTime) / 1000; // Convert to seconds
-      const workerStats = minerData.workerStats;
-      const workerHashRate = (workerStats.minDiff * workerStats.varDiffSharesFound) / timeDifference;
-      metrics.updateGaugeValue(minerHashRateGauge, [minerData.workerStats.workerName, address], workerHashRate);
-      totalHashRate += workerHashRate;
-      if (DEBUG) this.monitoring.debug(`SharesManager: Worker ${workerStats.workerName} stats - Time: ${timeDifference}s, Difficulty: ${workerStats.minDiff}, HashRate: ${workerHashRate}H/s, SharesFound: ${workerStats.sharesFound}, StaleShares: ${workerStats.staleShares}, InvalidShares: ${workerStats.invalidShares}`);
+        const now = Date.now();
+        const relevantShares = minerData.workerStats.recentShares.filter(share => now - share.timestamp <= windowSize);
+        
+        if (relevantShares.length === 0) return;
+
+        const avgDifficulty = relevantShares.reduce((acc, share) => acc + share.difficulty, 0) / relevantShares.length;
+        const timeDifference = (now - relevantShares[0].timestamp) / 1000; // in seconds
+
+        const workerHashRate = (avgDifficulty * relevantShares.length) / timeDifference;
+        metrics.updateGaugeValue(minerHashRateGauge, [minerData.workerStats.workerName, address], workerHashRate);
+        totalHashRate += workerHashRate;
     });
 
     metrics.updateGaugeValue(poolHashRateGauge, ['pool', this.poolAddress], totalHashRate);
     if (DEBUG) {
-      this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate} GH/s`);
+        this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate} GH/s`);
     }
-  }
+}
 
   getMiners() {
     return this.miners;

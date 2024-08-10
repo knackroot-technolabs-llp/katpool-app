@@ -122,7 +122,13 @@ export class SharesManager {
       minerData.workerStats.varDiffSharesFound++;
       minerData.workerStats.lastShare = timestamp;
       minerData.workerStats.minDiff = currentDifficulty;
-      minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty }); // Add the share to recentShares
+
+      // Ensure recentShares array exists
+      if (!minerData.workerStats.recentShares) {
+        minerData.workerStats.recentShares = [];
+      }
+
+      minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty });
     }
 
     // Clean up old shares outside the window
@@ -203,24 +209,30 @@ export class SharesManager {
     const windowSize = 10 * 60 * 1000; // 10 minutes window
 
     this.miners.forEach((minerData, address) => {
-        const now = Date.now();
-        const relevantShares = minerData.workerStats.recentShares.filter(share => now - share.timestamp <= windowSize);
-        
-        if (relevantShares.length === 0) return;
+      const now = Date.now();
 
-        const avgDifficulty = relevantShares.reduce((acc, share) => acc + share.difficulty, 0) / relevantShares.length;
-        const timeDifference = (now - relevantShares[0].timestamp) / 1000; // in seconds
+      // Check if recentShares exists
+      if (!minerData.workerStats.recentShares) {
+        minerData.workerStats.recentShares = [];
+      }
 
-        const workerHashRate = (avgDifficulty * relevantShares.length) / timeDifference;
-        metrics.updateGaugeValue(minerHashRateGauge, [minerData.workerStats.workerName, address], workerHashRate);
-        totalHashRate += workerHashRate;
+      const relevantShares = minerData.workerStats.recentShares.filter(share => now - share.timestamp <= windowSize);
+
+      if (relevantShares.length === 0) return;
+
+      const avgDifficulty = relevantShares.reduce((acc, share) => acc + share.difficulty, 0) / relevantShares.length;
+      const timeDifference = (now - relevantShares[0].timestamp) / 1000; // in seconds
+
+      const workerHashRate = (avgDifficulty * relevantShares.length) / timeDifference;
+      metrics.updateGaugeValue(minerHashRateGauge, [minerData.workerStats.workerName, address], workerHashRate);
+      totalHashRate += workerHashRate;
     });
 
     metrics.updateGaugeValue(poolHashRateGauge, ['pool', this.poolAddress], totalHashRate);
     if (DEBUG) {
-        this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate} GH/s`);
+      this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate} GH/s`);
     }
-}
+  }
 
   getMiners() {
     return this.miners;

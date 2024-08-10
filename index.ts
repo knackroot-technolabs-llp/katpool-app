@@ -6,10 +6,11 @@ import Pool from "./src/pool";
 import config from "./config/config.json";
 import dotenv from 'dotenv';
 import Monitoring from './src/monitoring'
-import { PushMetrics }  from "./src/prometheus";
+import { PushMetrics } from "./src/prometheus";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import { ExitStatus, getParsedCommandLineOfConfigFile } from "typescript";
 
 export let DEBUG = 0
 if (process.env.DEBUG == "1") {
@@ -18,7 +19,7 @@ if (process.env.DEBUG == "1") {
 
 // Send config.json to API server
 async function sendConfig() {
-  if (DEBUG) monitoring.log(`Main: Trying to send config to kaspool-monitor`);
+  if (DEBUG) monitoring.debug(`Main: Trying to send config to kaspool-monitor`);
   try {
     const configPath = path.resolve('./config/config.json');
     const configData = fs.readFileSync(configPath, 'utf-8');
@@ -38,14 +39,19 @@ monitoring.log(`Main: Starting kaspool App`)
 
 dotenv.config();
 
+monitoring.log(`Main: network: ${config.network}`);
+
 const rpc = new RpcClient({
-  resolver: new Resolver(),
+  resolver: new Resolver({
+    urls : config.node
+  }),
   encoding: Encoding.Borsh,
   networkId: config.network,
 });
+
 await rpc.connect();
 
-monitoring.log(`Main: RPC connexion started`)
+monitoring.log(`Main: RPC connection started`)
 
 const serverInfo = await rpc.getServerInfo();
 if (!serverInfo.isSynced || !serverInfo.hasUtxoIndex) throw Error('Provided node is either not synchronized or lacks the UTXO index.');
@@ -68,7 +74,7 @@ const treasury = new Treasury(rpc, serverInfo.networkId, treasuryPrivateKey, con
 const templates = new Templates(rpc, treasury.address, config.stratum.templates.cacheSize);
 
 const stratum = new Stratum(templates, config.stratum.port, config.stratum.difficulty, kaspoolPshGw, treasury.address, config.stratum.sharesPerMinute);
-const pool = new Pool(treasury, stratum, stratum.sharesManager );
+const pool = new Pool(treasury, stratum, stratum.sharesManager);
 
 
 

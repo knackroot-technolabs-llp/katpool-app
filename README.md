@@ -42,12 +42,15 @@ For now, all the instances share the same env var. However, in the future, it's 
 
 ### requires folders and files
 
-Crete `postgres_data` folder at the repository root location for the postgres data, and make it persistant between restarts, and ensure the following files are present:
+Create `postgres_data` folder at the repository root location for the postgres data files, and make that info persistant between restarts, and ensure the following files are present:
 * prometheus.yml: prometheus scrape configuration (you don't need to modify it)
 * init.sql: to setup the database the first time it's started
 * nginx.conf
 * config 
-* **wasm** folder must the also available
+* **wasm** folder must the also available. Check download link above
+
+Additionally:
+* **prometheus_data** folder: Optionally you can uncomment prometheus_data in docker_compose.yml to bring persistency between restarts. Prometheus requires writes and read permissions.
 
 ### Configuration
 

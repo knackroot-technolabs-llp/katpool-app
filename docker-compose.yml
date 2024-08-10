@@ -62,7 +62,7 @@ services:
     image: prom/prometheus
     container_name: kaspool-prmths
     depends_on:
-      - kaspool-db
+      - postgres
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus_data:/prometheus

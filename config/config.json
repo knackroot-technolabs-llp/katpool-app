@@ -4,7 +4,7 @@
   "paymentInterval": 1,
   "pool_id" : "us01-pool1",
   "location" : "us-central",
-  "hostname" : "us01-coinchimp.xyz",  
+  "hostname" : "katpool.nachowyborski.xyz",  
   "stratum": {
     "port": 7777,
     "templates": {

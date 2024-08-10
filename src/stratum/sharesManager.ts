@@ -6,15 +6,16 @@ import { stringifyHashrate, getAverageHashrateGHs } from './utils';
 import Monitoring from '../monitoring'
 import { DEBUG } from '../../index'
 import {
-  minerHashRateGauge, 
-  poolHashRateGauge , 
-  minerAddedShares, 
-  minerIsBlockShare, 
-  minerInvalidShares, 
-  minerStaleShares, 
-  minerDuplicatedShares, 
-  varDiff } from '../prometheus'
-import { metrics } from '../../index';  
+  minerHashRateGauge,
+  poolHashRateGauge,
+  minerAddedShares,
+  minerIsBlockShare,
+  minerInvalidShares,
+  minerStaleShares,
+  minerDuplicatedShares,
+  varDiff
+} from '../prometheus'
+import { metrics } from '../../index';
 
 export interface WorkerStats {
   blocksFound: number;
@@ -29,6 +30,7 @@ export interface WorkerStats {
   varDiffSharesFound: number;
   varDiffWindow: number;
   minDiff: number;
+  shareDifficulties: number[];
 }
 
 type MinerData = {
@@ -73,7 +75,8 @@ export class SharesManager {
         varDiffStartTime: Date.now(),
         varDiffSharesFound: 0,
         varDiffWindow: 0,
-        minDiff: 1 // Set to initial difficulty
+        minDiff: 1, // Set to initial difficulty
+        shareDifficulties: [] // Initialize as empty array
       };
       minerData.workerStats = workerStats;
       if (DEBUG) this.monitoring.debug(`SharesManager: Created new worker stats for ${workerName}`);
@@ -94,7 +97,7 @@ export class SharesManager {
     if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - Nonce: ${nonce} - Hash: ${hash}`);
     const timestamp = Date.now();
     let report;
-  
+
     if (!minerData) {
       this.miners.set(address, {
         sockets: new Set(),
@@ -110,7 +113,8 @@ export class SharesManager {
           varDiffStartTime: Date.now(),
           varDiffSharesFound: 0,
           varDiffWindow: 0,
-          minDiff: currentDifficulty
+          minDiff: currentDifficulty,
+          shareDifficulties: [currentDifficulty], // Initialize with first share difficulty
         }
       });
     } else {
@@ -118,14 +122,15 @@ export class SharesManager {
       minerData.workerStats.varDiffSharesFound++;
       minerData.workerStats.lastShare = timestamp;
       minerData.workerStats.minDiff = currentDifficulty;
+      minerData.workerStats.shareDifficulties.push(currentDifficulty); // Track each share's difficulty
     }
-  
-    if (this.contributions.has(nonce)){
+
+    if (this.contributions.has(nonce)) {
       metrics.updateGaugeInc(minerDuplicatedShares, [minerId, address]);
       throw Error('Duplicate share');
     }
     const state = templates.getPoW(hash);
-    if (!state){
+    if (!state) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Stale header for miner ${minerId} and hash: ${hash}`);
       metrics.updateGaugeInc(minerStaleShares, [minerId, address]);
       throw Error('Stale header');
@@ -135,18 +140,18 @@ export class SharesManager {
       if (DEBUG) this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
       metrics.updateGaugeInc(minerIsBlockShare, [minerId, address]);
       report = await templates.submit(minerId, hash, nonce);
-    }  
+    }
     const validity = target <= calculateTarget(currentDifficulty);
-    
-    if (!validity){
+
+    if (!validity) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Invalid share for target: ${target} for miner ${minerId}`);
       metrics.updateGaugeInc(minerInvalidShares, [minerId, address]);
       throw Error('Invalid share');
-    } 
-  
+    }
+
     this.contributions.set(nonce, { address, difficulty: currentDifficulty, timestamp, minerId });
     if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);
-  
+
     if (report && minerData) minerData.workerStats.blocksFound++;
   }
 
@@ -190,18 +195,37 @@ export class SharesManager {
   }
 
   calcHashRates() {
+    const MAX_SHARES_TRACKED = 1000; // Set a limit for tracked shares, adjust as needed
     let totalHashRate = 0;
+
     this.miners.forEach((minerData, address) => {
-      const timeDifference = (Date.now() - minerData.workerStats.startTime) / 1000; // Convert to seconds
-      const workerStats = minerData.workerStats;
-      const workerHashRate = (workerStats.minDiff * workerStats.varDiffSharesFound) / timeDifference;
-      metrics.updateGaugeValue(minerHashRateGauge, [minerData.workerStats.workerName, address], workerHashRate);
-      totalHashRate += workerHashRate;
-      if (DEBUG) this.monitoring.debug(`SharesManager: Worker ${workerStats.workerName} stats - Time: ${timeDifference}s, Difficulty: ${workerStats.minDiff}, HashRate: ${workerHashRate}H/s, SharesFound: ${workerStats.sharesFound}, StaleShares: ${workerStats.staleShares}, InvalidShares: ${workerStats.invalidShares}`);
+        const timeDifference = (Date.now() - minerData.workerStats.startTime) / 1000; // Convert to seconds
+        const workerStats = minerData.workerStats;
+
+        // Calculate total difficulty by summing all individual difficulties
+        const totalDiff = workerStats.shareDifficulties.reduce((acc, diff) => acc + diff, 0);
+
+        // Calculate the hashrate using total difficulty
+        const workerHashRate = totalDiff / timeDifference;
+
+        metrics.updateGaugeValue(minerHashRateGauge, [workerStats.workerName, address], workerHashRate);
+        totalHashRate += workerHashRate;
+
+        if (DEBUG) {
+            this.monitoring.debug(`SharesManager: Worker ${workerStats.workerName} stats - Time: ${timeDifference}s, Total Difficulty: ${totalDiff}, HashRate: ${workerHashRate}H/s, SharesFound: ${workerStats.sharesFound}, StaleShares: ${workerStats.staleShares}, InvalidShares: ${workerStats.invalidShares}`);
+        }
+
+        // Cleanup: Limit the size of shareDifficulties array
+        if (workerStats.shareDifficulties.length > MAX_SHARES_TRACKED) {
+            workerStats.shareDifficulties.splice(0, workerStats.shareDifficulties.length - MAX_SHARES_TRACKED);
+        }
     });
-    metrics.updateGaugeValue(poolHashRateGauge, ['pool',this.poolAddress], totalHashRate);
-    if (DEBUG) this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate} GH/s`);
-  }
+
+    metrics.updateGaugeValue(poolHashRateGauge, ['pool', this.poolAddress], totalHashRate);
+    if (DEBUG) {
+        this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate} GH/s`);
+    }
+}
 
   getMiners() {
     return this.miners;
@@ -221,18 +245,18 @@ export class SharesManager {
   startVardiffThread(sharesPerMin: number, varDiffStats: boolean, clampPow2: boolean) {
     setInterval(() => {
       const now = Date.now();
-  
+
       this.miners.forEach(minerData => {
         const stats = minerData.workerStats;
         const elapsedMinutes = (now - stats.varDiffStartTime) / 60000; // Convert ms to minutes
         if (elapsedMinutes < 1) return;
-  
+
         const sharesFound = stats.varDiffSharesFound;
         const shareRate = sharesFound / elapsedMinutes;
         const targetRate = sharesPerMin;
-  
+
         if (DEBUG) this.monitoring.debug(`shareManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedMinutes: ${elapsedMinutes}, shareRate: ${shareRate}, targetRate: ${targetRate}`);
-  
+
         if (shareRate > targetRate * 1.2) {
           let newDiff = stats.minDiff * 1.5;
           if (clampPow2) {
@@ -251,10 +275,10 @@ export class SharesManager {
           stats.minDiff = newDiff;
           if (DEBUG) this.monitoring.debug(`shareManager: VarDiff - Decreasing difficulty for ${stats.workerName} to ${newDiff}`);
         }
-  
+
         stats.varDiffSharesFound = 0;
         stats.varDiffStartTime = now;
-  
+
         if (varDiffStats) {
           this.monitoring.log(`shareManager: VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsed: ${elapsedMinutes.toFixed(2)}, shareRate: ${shareRate.toFixed(2)}, newDiff: ${stats.minDiff}`);
           metrics.updateGaugeValue(varDiff, [stats.workerName], stats.minDiff);
@@ -262,6 +286,6 @@ export class SharesManager {
       });
     }, 600000); // Run every 10 minute
   }
-  
+
 
 }

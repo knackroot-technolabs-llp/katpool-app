@@ -14,6 +14,7 @@ services:
 
   kaspool-app:
     image: ghcr.io/argonmining/katpool-app:v2408.1b-main
+    pull_policy: always
     container_name: kaspool-app
     depends_on:
       - postgres
@@ -32,6 +33,7 @@ services:
 
   kaspool-monitor:
     image: ghcr.io/argonmining/katpool-monitor:v2408.1b-main
+    pull_policy: always
     container_name: kaspool-monitor
     depends_on:
       - postgres
@@ -43,6 +45,7 @@ services:
 
   kaspool-payment:
     image: ghcr.io/argonmining/katpool-payment:v2408.1b-main
+    pull_policy: always
     container_name: kaspool-payment   
     depends_on:
       - postgres

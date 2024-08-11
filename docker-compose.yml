@@ -41,6 +41,9 @@ services:
       - backend
     env_file:
       - .env
+    ports:
+      - "9301:9301"
+      - "9300:9300"
     restart: always
 
   kaspool-payment:

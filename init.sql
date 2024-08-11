@@ -9,3 +9,11 @@ CREATE TABLE IF NOT EXISTS wallet_total (
   address VARCHAR(255) PRIMARY KEY,
   total NUMERIC
 );
+
+CREATE TABLE IF NOT EXISTS payments (
+    id SERIAL PRIMARY KEY,
+    wallet_address VARCHAR(255) NOT NULL,
+    amount NUMERIC(20, 8) NOT NULL,
+    timestamp TIMESTAMP DEFAULT NOW(),
+    transaction_hash VARCHAR(255) NOT NULL
+);

@@ -58,7 +58,6 @@ export default class Database {
       throw e;
     }
   }
-  
 
   async resetBalanceByAddress(wallet: string) {
     await this.client.query('UPDATE miners_balance SET balance = $1 WHERE wallet = $2', [0n, wallet]);
@@ -81,5 +80,4 @@ export default class Database {
     }
     return { balance: BigInt(res.rows[0].balance) };
   }
-  
 }

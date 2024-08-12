@@ -291,7 +291,7 @@ export class SharesManager {
           metrics.updateGaugeValue(varDiff, [stats.workerName], stats.minDiff);
         }
       });
-    }, 600000); // Run every 10 minute
+    }, 300000); // Run every 5 minute
   }
 
 

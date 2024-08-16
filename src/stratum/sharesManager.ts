@@ -279,25 +279,28 @@ export class SharesManager {
 
         if (DEBUG) this.monitoring.debug(`shareManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedMinutes: ${elapsedMinutes}, shareRate: ${shareRate}, targetRate: ${targetRate}`);
 
-        let adjustmentFactor = 1;
+        this.monitoring.debug(`shareManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedMinutes: ${elapsedMinutes}, shareRate: ${shareRate}, targetRate: ${targetRate}, currentDiff: ${stats.minDiff}`);
 
         if (shareRate > targetRate * 1.1) {
-          adjustmentFactor = 1.2;
+          let newDiff = stats.minDiff * 1.2;
+          if (clampPow2) {
+            newDiff = Math.pow(2, Math.floor(Math.log2(newDiff)));
+          }
+          this.monitoring.debug(`shareManager: VarDiff - Increasing difficulty for ${stats.workerName} from ${stats.minDiff} to ${newDiff}`);
+          stats.minDiff = newDiff;
         } else if (shareRate < targetRate * 0.9) {
-          adjustmentFactor = 0.8;
-        }
-
-        let newDiff = stats.minDiff * adjustmentFactor;
-        if (clampPow2) {
-          newDiff = Math.pow(2, Math.round(Math.log2(newDiff)));
-        }
-
-        // Ensure the new difficulty isn't lower than the minimum allowed
-        if (newDiff < 1) newDiff = 1;
-
-        stats.minDiff = newDiff;
-
-        if (DEBUG) this.monitoring.debug(`shareManager: VarDiff - Adjusting difficulty for ${stats.workerName} to ${newDiff}`);
+          let newDiff = stats.minDiff / 1.2;
+          if (clampPow2) {
+            newDiff = Math.pow(2, Math.ceil(Math.log2(newDiff)));
+          }
+          if (newDiff < 1) {
+            newDiff = 1;
+          }
+          this.monitoring.debug(`shareManager: VarDiff - Decreasing difficulty for ${stats.workerName} from ${stats.minDiff} to ${newDiff}`);
+          stats.minDiff = newDiff;
+        } else {
+          this.monitoring.debug(`shareManager: VarDiff - No change in difficulty for ${stats.workerName} (current difficulty: ${stats.minDiff})`);
+        };
 
         stats.varDiffSharesFound = 0;
         stats.varDiffStartTime = now;

@@ -126,18 +126,20 @@ export class SharesManager {
           varDiffSharesFound: 0,
           varDiffWindow: 0,
           minDiff: currentDifficulty,
-          recentShares: new Denque<{ timestamp: number, difficulty: number }>() // Correct initialization
+          recentShares: new Denque<{ timestamp: number, difficulty: number }>() // Initialize recentShares
         }
       };
       this.miners.set(address, minerData);
     } else {
+      // Atomically update worker stats
       minerData.workerStats.sharesFound++;
       minerData.workerStats.varDiffSharesFound++;
       minerData.workerStats.lastShare = timestamp;
       minerData.workerStats.minDiff = currentDifficulty;
 
+      // Update recentShares with the new share
       minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty });
-      
+
       const windowSize = 10 * 60 * 1000; // 10 minutes window
       while (minerData.workerStats.recentShares.length > 0 && Date.now() - minerData.workerStats.recentShares.peekFront()!.timestamp > windowSize) {
         minerData.workerStats.recentShares.shift();
@@ -210,22 +212,30 @@ export class SharesManager {
 
   calcHashRates() {
     let totalHashRate = 0;
-    const windowSize = 10 * 60 * 1000; // 10 minutes window
+    const baseWindowSize = 10 * 60 * 1000; // 10 minutes base window
 
     this.miners.forEach((minerData, address) => {
       const now = Date.now();
 
-      // Using the denque's iteration capability
-      const relevantShares: { timestamp: number, difficulty: number }[] = [];
-      minerData.workerStats.recentShares.toArray().forEach((share: { timestamp: number, difficulty: number }) => {
-        if (now - share.timestamp <= windowSize) {
-          relevantShares.push(share);
-        }
-      });
+      // Adjust the window size dynamically based on miner's activity
+      const sharesCount = minerData.workerStats.recentShares.length;
+      const windowSize = Math.min(baseWindowSize, sharesCount * 1000); // Minimum 1 second per share, max 10 min
+
+      // Extract relevant shares from recentShares
+      const relevantShares = minerData.workerStats.recentShares.toArray().filter(share => now - share.timestamp <= windowSize);
 
       if (relevantShares.length === 0) return;
 
-      const avgDifficulty = relevantShares.reduce((acc: number, share: { timestamp: number, difficulty: number }) => acc + share.difficulty, 0) / relevantShares.length;
+      // Weighted average based on time proximity
+      let totalDifficulty = 0;
+      let totalWeight = 0;
+      relevantShares.forEach((share, index) => {
+        const weight = 1 + (index / relevantShares.length); // More recent shares get more weight
+        totalDifficulty += share.difficulty * weight;
+        totalWeight += weight;
+      });
+
+      const avgDifficulty = totalDifficulty / totalWeight;
       const timeDifference = (now - relevantShares[0].timestamp) / 1000; // in seconds
 
       const workerHashRate = (avgDifficulty * relevantShares.length) / timeDifference;
@@ -269,24 +279,25 @@ export class SharesManager {
 
         if (DEBUG) this.monitoring.debug(`shareManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedMinutes: ${elapsedMinutes}, shareRate: ${shareRate}, targetRate: ${targetRate}`);
 
-        if (shareRate > targetRate * 1.2) {
-          let newDiff = stats.minDiff * 1.5;
-          if (clampPow2) {
-            newDiff = Math.pow(2, Math.floor(Math.log2(newDiff)));
-          }
-          stats.minDiff = newDiff;
-          if (DEBUG) this.monitoring.debug(`shareManager: VarDiff - Increasing difficulty for ${stats.workerName} to ${newDiff}`);
-        } else if (shareRate < targetRate * 0.8) {
-          let newDiff = stats.minDiff / 1.5;
-          if (clampPow2) {
-            newDiff = Math.pow(2, Math.ceil(Math.log2(newDiff)));
-          }
-          if (newDiff < 1) {
-            newDiff = 1;
-          }
-          stats.minDiff = newDiff;
-          if (DEBUG) this.monitoring.debug(`shareManager: VarDiff - Decreasing difficulty for ${stats.workerName} to ${newDiff}`);
+        let adjustmentFactor = 1;
+
+        if (shareRate > targetRate * 1.1) {
+          adjustmentFactor = 1.2;
+        } else if (shareRate < targetRate * 0.9) {
+          adjustmentFactor = 0.8;
         }
+
+        let newDiff = stats.minDiff * adjustmentFactor;
+        if (clampPow2) {
+          newDiff = Math.pow(2, Math.round(Math.log2(newDiff)));
+        }
+
+        // Ensure the new difficulty isn't lower than the minimum allowed
+        if (newDiff < 1) newDiff = 1;
+
+        stats.minDiff = newDiff;
+
+        if (DEBUG) this.monitoring.debug(`shareManager: VarDiff - Adjusting difficulty for ${stats.workerName} to ${newDiff}`);
 
         stats.varDiffSharesFound = 0;
         stats.varDiffStartTime = now;
@@ -296,6 +307,6 @@ export class SharesManager {
           metrics.updateGaugeValue(varDiff, [stats.workerName], stats.minDiff);
         }
       });
-    }, 300000); // Run every 5 minute
+    }, 300000); // Run every 5 minutes
   }
 }

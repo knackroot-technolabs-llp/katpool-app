@@ -17,6 +17,20 @@ export function stringifyHashrate(ghs: number): string {
 }
 
 export function getAverageHashrateGHs(stats: WorkerStats): number {
-  const elapsedSeconds = (Date.now() - stats.startTime) / 1000;
-  return (stats.minDiff * stats.varDiffSharesFound) / elapsedSeconds;
+  const windowSize = 10 * 60 * 1000; // 10 minutes window
+  const relevantShares: { timestamp: number, difficulty: number }[] = [];
+
+  // Use Denque's toArray() method to filter relevant shares
+  stats.recentShares.toArray().forEach(share => {
+    if (Date.now() - share.timestamp <= windowSize) {
+      relevantShares.push(share);
+    }
+  });
+
+  if (relevantShares.length === 0) return 0;
+
+  const avgDifficulty = relevantShares.reduce((acc, share) => acc + share.difficulty, 0) / relevantShares.length;
+  const timeDifference = (Date.now() - relevantShares[0].timestamp) / 1000; // in seconds
+
+  return (avgDifficulty * relevantShares.length) / timeDifference;
 }

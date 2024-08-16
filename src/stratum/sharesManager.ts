@@ -253,15 +253,23 @@ export class SharesManager {
     return this.miners;
   }
 
-  resetContributions() {
-    this.contributions.clear();
+  private getRecentContributions(windowMillis: number): Contribution[] {
+    const now = Date.now();
+    return Array.from(this.contributions.values()).filter(contribution => {
+      return now - contribution.timestamp <= windowMillis;
+    });
   }
 
-  dumpContributions() {
-    const contributions = Array.from(this.contributions.values());
-    if (DEBUG) this.monitoring.debug(`SharesManager: Amount of contributions per miner for this cycle ${contributions.length}`);
+  // Updated dumpContributions method
+  dumpContributions(windowMillis: number = 10000): Contribution[] {
+    const contributions = this.getRecentContributions(windowMillis);
+    if (DEBUG) this.monitoring.debug(`SharesManager: Amount of contributions within the last ${windowMillis}ms: ${contributions.length}`);
     this.contributions.clear();
     return contributions;
+  }
+
+  resetContributions() {
+    this.contributions.clear();
   }
 
   startVardiffThread(sharesPerMin: number, varDiffStats: boolean, clampPow2: boolean) {

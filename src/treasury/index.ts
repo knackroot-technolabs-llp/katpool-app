@@ -9,10 +9,10 @@ export default class Treasury extends EventEmitter {
   context: UtxoContext
   fee: number
   private monitoring: Monitoring;
-  
-  constructor (rpc: RpcClient, networkId: string, privateKey: string, fee: number) {
+
+  constructor(rpc: RpcClient, networkId: string, privateKey: string, fee: number) {
     super()
-    
+
     this.privateKey = new PrivateKey(privateKey)
     this.address = (this.privateKey.toAddress(networkId)).toString()
     this.processor = new UtxoProcessor({ rpc, networkId })
@@ -23,21 +23,21 @@ export default class Treasury extends EventEmitter {
 
     this.registerProcessor()
   }
-  
 
-  private registerProcessor () {
+
+  private registerProcessor() {
     this.processor.addEventListener("utxo-proc-start", async () => {
       await this.context.clear()
-      await this.context.trackAddresses([ this.address ])
+      await this.context.trackAddresses([this.address])
     })
 
     this.processor.addEventListener('maturity', (e) => {
       // @ts-ignore
       const reward = e.data.value
-      this.monitoring.log(`Treasury: Rewards to distribute on this coinbase cycle :  ${reward}.`);
+      this.monitoring.log(`Treasury: Rewards to distribute on this payment cycle: ${reward}.`);
       const poolFee = (reward * BigInt(this.fee * 100)) / 10000n
-      this.monitoring.log(`Treasury: Pool fees to retain on the coinbase cycle: ${poolFee}.`);
-      this.emit('coinbase', reward - poolFee, poolFee)     
+      this.monitoring.log(`Treasury: Pool fees to retain on the payment cycle: ${poolFee}.`);
+      this.emit('coinbase', reward - poolFee, poolFee)
     })
 
     this.processor.start()

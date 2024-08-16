@@ -91,15 +91,26 @@ export class SharesManager {
   }
 
   async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint, templates: any) {
-    const minerData = this.miners.get(address);
-    const currentDifficulty = minerData ? minerData.workerStats.minDiff : difficulty;
-    metrics.updateGaugeInc(minerAddedShares, [minerId, address]);
-    if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - Nonce: ${nonce} - Hash: ${hash}`);
-    const timestamp = Date.now();
-    let report;
+    // Critical Section: Check and Add Share
+    if (this.contributions.has(nonce)) {
+      metrics.updateGaugeInc(minerDuplicatedShares, [minerId, address]);
+      throw Error('Duplicate share');
+    } else {
+      // Directly use nonce as the key, ensuring atomic operation
+      this.contributions.set(nonce, { address, difficulty, timestamp: Date.now(), minerId });
+    }
 
+    const timestamp = Date.now();
+    let minerData = this.miners.get(address);
+    const currentDifficulty = minerData ? minerData.workerStats.minDiff : difficulty;
+
+    metrics.updateGaugeInc(minerAddedShares, [minerId, address]);
+
+    if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - Nonce: ${nonce} - Hash: ${hash}`);
+
+    // Initial setup for a new miner
     if (!minerData) {
-      this.miners.set(address, {
+      minerData = {
         sockets: new Set(),
         workerStats: {
           blocksFound: 0,
@@ -116,53 +127,44 @@ export class SharesManager {
           minDiff: currentDifficulty,
           recentShares: [] // Initialize recentShares array
         }
-      });
+      };
+      this.miners.set(address, minerData);
     } else {
       minerData.workerStats.sharesFound++;
       minerData.workerStats.varDiffSharesFound++;
       minerData.workerStats.lastShare = timestamp;
       minerData.workerStats.minDiff = currentDifficulty;
 
-      // Ensure recentShares array exists
-      if (!minerData.workerStats.recentShares) {
-        minerData.workerStats.recentShares = [];
-      }
-
       minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty });
     }
 
     // Clean up old shares outside the window
     const windowSize = 10 * 60 * 1000; // 10 minutes window
-    minerData!.workerStats.recentShares = minerData!.workerStats.recentShares.filter(share => Date.now() - share.timestamp <= windowSize);
+    minerData.workerStats.recentShares = minerData.workerStats.recentShares.filter(share => Date.now() - share.timestamp <= windowSize);
 
-    if (this.contributions.has(nonce)) {
-      metrics.updateGaugeInc(minerDuplicatedShares, [minerId, address]);
-      throw Error('Duplicate share');
-    }
     const state = templates.getPoW(hash);
     if (!state) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Stale header for miner ${minerId} and hash: ${hash}`);
       metrics.updateGaugeInc(minerStaleShares, [minerId, address]);
       throw Error('Stale header');
     }
+
     const [isBlock, target] = state.checkWork(nonce);
     if (isBlock) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
       metrics.updateGaugeInc(minerIsBlockShare, [minerId, address]);
-      report = await templates.submit(minerId, hash, nonce);
+      const report = await templates.submit(minerId, hash, nonce);
+      if (report) minerData.workerStats.blocksFound++;
     }
-    const validity = target <= calculateTarget(currentDifficulty);
 
+    const validity = target <= calculateTarget(currentDifficulty);
     if (!validity) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Invalid share for target: ${target} for miner ${minerId}`);
       metrics.updateGaugeInc(minerInvalidShares, [minerId, address]);
       throw Error('Invalid share');
     }
 
-    this.contributions.set(nonce, { address, difficulty: currentDifficulty, timestamp, minerId });
     if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);
-
-    if (report && minerData) minerData.workerStats.blocksFound++;
   }
 
   startStatsThread() {

@@ -3,8 +3,8 @@ import { calculateTarget } from "../../wasm/kaspa";
 import { Pushgateway } from 'prom-client';
 import type { RegistryContentType } from 'prom-client';
 import { stringifyHashrate, getAverageHashrateGHs } from './utils';
-import Monitoring from '../monitoring'
-import { DEBUG } from '../../index'
+import Monitoring from '../monitoring';
+import { DEBUG } from '../../index';
 import {
   minerHashRateGauge,
   poolHashRateGauge,
@@ -14,8 +14,10 @@ import {
   minerStaleShares,
   minerDuplicatedShares,
   varDiff
-} from '../prometheus'
+} from '../prometheus';
 import { metrics } from '../../index';
+// Fix the import statement
+import Denque from 'denque';
 
 export interface WorkerStats {
   blocksFound: number;
@@ -30,7 +32,7 @@ export interface WorkerStats {
   varDiffSharesFound: number;
   varDiffWindow: number;
   minDiff: number;
-  recentShares: { timestamp: number, difficulty: number }[];
+  recentShares: Denque<{ timestamp: number, difficulty: number }>;
 }
 
 type MinerData = {
@@ -76,7 +78,7 @@ export class SharesManager {
         varDiffSharesFound: 0,
         varDiffWindow: 0,
         minDiff: 1, // Set to initial difficulty
-        recentShares: [] // Initialize recentShares array
+        recentShares: new Denque<{ timestamp: number, difficulty: number }>() // Initialize denque correctly
       };
       minerData.workerStats = workerStats;
       if (DEBUG) this.monitoring.debug(`SharesManager: Created new worker stats for ${workerName}`);
@@ -96,7 +98,6 @@ export class SharesManager {
       metrics.updateGaugeInc(minerDuplicatedShares, [minerId, address]);
       throw Error('Duplicate share');
     } else {
-      // Directly use nonce as the key, ensuring atomic operation
       this.contributions.set(nonce, { address, difficulty, timestamp: Date.now(), minerId });
     }
 
@@ -125,7 +126,7 @@ export class SharesManager {
           varDiffSharesFound: 0,
           varDiffWindow: 0,
           minDiff: currentDifficulty,
-          recentShares: [] // Initialize recentShares array
+          recentShares: new Denque<{ timestamp: number, difficulty: number }>() // Correct initialization
         }
       };
       this.miners.set(address, minerData);
@@ -136,11 +137,12 @@ export class SharesManager {
       minerData.workerStats.minDiff = currentDifficulty;
 
       minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty });
+      
+      const windowSize = 10 * 60 * 1000; // 10 minutes window
+      while (minerData.workerStats.recentShares.length > 0 && Date.now() - minerData.workerStats.recentShares.peekFront()!.timestamp > windowSize) {
+        minerData.workerStats.recentShares.shift();
+      }
     }
-
-    // Clean up old shares outside the window
-    const windowSize = 10 * 60 * 1000; // 10 minutes window
-    minerData.workerStats.recentShares = minerData.workerStats.recentShares.filter(share => Date.now() - share.timestamp <= windowSize);
 
     const state = templates.getPoW(hash);
     if (!state) {
@@ -191,7 +193,7 @@ export class SharesManager {
       lines.sort();
       str += lines.join("\n");
       const rateStr = stringifyHashrate(totalRate);
-      const overallStats = Array.from(this.miners.values()).reduce((acc, minerData) => {
+      const overallStats = Array.from(this.miners.values()).reduce((acc: any, minerData: MinerData) => {
         const stats = minerData.workerStats;
         acc.sharesFound += stats.sharesFound;
         acc.staleShares += stats.staleShares;
@@ -213,16 +215,17 @@ export class SharesManager {
     this.miners.forEach((minerData, address) => {
       const now = Date.now();
 
-      // Check if recentShares exists
-      if (!minerData.workerStats.recentShares) {
-        minerData.workerStats.recentShares = [];
-      }
-
-      const relevantShares = minerData.workerStats.recentShares.filter(share => now - share.timestamp <= windowSize);
+      // Using the denque's iteration capability
+      const relevantShares: { timestamp: number, difficulty: number }[] = [];
+      minerData.workerStats.recentShares.toArray().forEach((share: { timestamp: number, difficulty: number }) => {
+        if (now - share.timestamp <= windowSize) {
+          relevantShares.push(share);
+        }
+      });
 
       if (relevantShares.length === 0) return;
 
-      const avgDifficulty = relevantShares.reduce((acc, share) => acc + share.difficulty, 0) / relevantShares.length;
+      const avgDifficulty = relevantShares.reduce((acc: number, share: { timestamp: number, difficulty: number }) => acc + share.difficulty, 0) / relevantShares.length;
       const timeDifference = (now - relevantShares[0].timestamp) / 1000; // in seconds
 
       const workerHashRate = (avgDifficulty * relevantShares.length) / timeDifference;
@@ -295,6 +298,4 @@ export class SharesManager {
       });
     }, 300000); // Run every 5 minute
   }
-
-
 }

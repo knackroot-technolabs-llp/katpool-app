@@ -11,8 +11,8 @@ import { minerjobSubmissions, jobsNotFound } from '../prometheus'
 import Monitoring from '../monitoring/index.ts';
 import { DEBUG } from '../../index'
 import { Mutex } from 'async-mutex'; // Add this import at the top
-import { metrics } from '../../index';  
-
+import { metrics } from '../../index';
+import Denque from 'denque';
 
 
 export default class Stratum extends EventEmitter {
@@ -93,7 +93,7 @@ export default class Stratum extends EventEmitter {
           const sockets = this.sharesManager.getMiners().get(worker.address)?.sockets || new Set();
           socket.data.workers.set(worker.name, worker);
           sockets.add(socket);
-  
+
           if (!this.sharesManager.getMiners().has(worker.address)) {
             this.sharesManager.getMiners().set(worker.address, {
               sockets,
@@ -109,7 +109,8 @@ export default class Stratum extends EventEmitter {
                 varDiffStartTime: Date.now(),
                 varDiffSharesFound: 0,
                 varDiffWindow: 0,
-                minDiff: this.difficulty
+                minDiff: this.difficulty,
+                recentShares: new Denque<{ timestamp: number, difficulty: number }>() // Initialize denque
               }
             });
           } else {
@@ -117,7 +118,7 @@ export default class Stratum extends EventEmitter {
             existingMinerData!.sockets = sockets;
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
           }
-  
+
           const event: Event<'set_extranonce'> = {
             method: 'set_extranonce',
             params: [randomBytes(4).toString('hex')]
@@ -130,7 +131,7 @@ export default class Stratum extends EventEmitter {
         // Inside the mining.submit case in the onMessage function
         case 'mining.submit': {
           const [address, name] = request.params[0].split('.');
-          metrics.updateGaugeInc(minerjobSubmissions, [name,address]);
+          metrics.updateGaugeInc(minerjobSubmissions, [name, address]);
           if (DEBUG) this.monitoring.debug(`Stratum: Submitting job for Worker Name: ${name}`);
           const worker = socket.data.workers.get(name);
           if (DEBUG) this.monitoring.debug(`Stratum: Checking worker data on socket for : ${name}`);
@@ -142,12 +143,12 @@ export default class Stratum extends EventEmitter {
           if (!hash) {
             if (DEBUG) this.monitoring.debug(`Stratum: Job not found - Address: ${address}, Worker Name: ${name}`);
             metrics.updateGaugeInc(jobsNotFound, [name, address]);
-          } 
+          }
           else {
             const minerId = name; // Use the worker name as minerId or define your minerId extraction logic
             if (DEBUG) this.monitoring.debug(`Stratum: Calculating current Difficulty between ${this.sharesManager.getMiners().get(worker.address)?.workerStats.minDiff} and ${socket.data.difficulty} `);
             const currentDifficulty = this.sharesManager.getMiners().get(worker.address)?.workerStats.minDiff || socket.data.difficulty;
-            if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);          
+            if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
             await this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, BigInt('0x' + request.params[2]), this.templates).catch(err => {
               if (!(err instanceof Error)) throw err;
               switch (err.message) {
@@ -168,7 +169,7 @@ export default class Stratum extends EventEmitter {
           }
           break;
         }
-  
+
         default:
           throw errors['UNKNOWN'];
       }

@@ -14,6 +14,7 @@ export default class Pool {
   private monitoring: Monitoring;
   private sharesManager: SharesManager; // Add SharesManager property
   private pushMetrics: PushMetrics; // Add PushMetrics property
+  private lastProcessedTimestamp = 0; // Add timestamp check
 
   constructor(treasury: Treasury, stratum: Stratum, sharesManager: SharesManager) {
     this.treasury = treasury;
@@ -30,7 +31,16 @@ export default class Pool {
     this.pushMetrics = new PushMetrics(process.env.PUSHGATEWAY || ''); // Initialize PushMetrics
 
     this.stratum.on('subscription', (ip: string, agent: string) => this.monitoring.log(`Pool: Miner ${ip} subscribed into notifications with ${agent}.`));
-    this.treasury.on('coinbase', (minerReward: bigint, poolFee: bigint) => this.allocate(minerReward, poolFee));
+    this.treasury.on('coinbase', (minerReward: bigint, poolFee: bigint) => {
+      const currentTimestamp = Date.now();
+      if (currentTimestamp - this.lastProcessedTimestamp < 1000) { // 1 second cooldown
+        this.monitoring.debug(`Pool: Skipping duplicate coinbase event. Last processed: ${this.lastProcessedTimestamp}, Current: ${currentTimestamp}`);
+        return;
+      }
+      this.lastProcessedTimestamp = currentTimestamp;
+      this.monitoring.log(`Pool: Processing coinbase event. Timestamp: ${currentTimestamp}`);
+      this.allocate(minerReward, poolFee).catch(console.error)
+    });
     //this.treasury.on('revenue', (amount: bigint) => this.revenuize(amount));
 
     this.monitoring.log(`Pool: Pool is active on port ${this.stratum.server.socket.port}.`);
@@ -44,12 +54,14 @@ export default class Pool {
   }
 
   private async allocate(minerReward: bigint, poolFee: bigint) {
+    this.monitoring.debug(`Pool: Starting allocation. Miner Reward: ${minerReward}, Pool Fee: ${poolFee}`);
     const works = new Map<string, { minerId: string, difficulty: number }>();
     let totalWork = 0;
     const walletHashrateMap = new Map<string, number>();
 
     // Get all shares since the last allocation
     const shares = this.sharesManager.getSharesSinceLastAllocation();
+    this.monitoring.debug(`Pool: Retrieved ${shares.length} shares for allocation`);
 
     for (const share of shares) {
       const { address, difficulty, minerId } = share;
@@ -82,7 +94,7 @@ export default class Pool {
 
     // Ensure totalWork is greater than 0 to prevent division by zero
     if (totalWork === 0) {
-      if (DEBUG) this.monitoring.debug(`Pool: No work found for allocation in the current cycle.`);
+      this.monitoring.debug(`Pool: No work found for allocation in the current cycle. Total shares: ${shares.length}`);
       return;
     }
 

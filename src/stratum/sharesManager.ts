@@ -347,6 +347,7 @@ export class SharesManager {
     while (this.shareWindow.length > 0 && (this.shareWindow.peekFront()?.timestamp ?? 0) >= this.lastAllocationTime) {
       shares.push(this.shareWindow.shift()!);
     }
+    this.monitoring.debug(`SharesManager: Retrieved ${shares.length} shares. Last allocation time: ${this.lastAllocationTime}, Current time: ${currentTime}`);
     this.lastAllocationTime = currentTime;
     return shares;
   }

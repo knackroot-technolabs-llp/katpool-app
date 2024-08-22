@@ -33,6 +33,7 @@ export interface WorkerStats {
   varDiffWindow: number;
   minDiff: number;
   recentShares: Denque<{ timestamp: number, difficulty: number }>;
+  hashrate: number; // Added hashrate property
 }
 
 type MinerData = {
@@ -82,7 +83,8 @@ export class SharesManager {
         varDiffSharesFound: 0,
         varDiffWindow: 0,
         minDiff: 1, // Set to initial difficulty
-        recentShares: new Denque<{ timestamp: number, difficulty: number }>() // Initialize denque correctly
+        recentShares: new Denque<{ timestamp: number, difficulty: number }>(), // Initialize denque correctly
+        hashrate: 0 // Initialize hashrate property
       };
       minerData.workerStats = workerStats;
       if (DEBUG) this.monitoring.debug(`SharesManager: Created new worker stats for ${workerName}`);
@@ -130,7 +132,8 @@ export class SharesManager {
           varDiffSharesFound: 0,
           varDiffWindow: 0,
           minDiff: currentDifficulty,
-          recentShares: new Denque<{ timestamp: number, difficulty: number }>() // Initialize recentShares
+          recentShares: new Denque<{ timestamp: number, difficulty: number }>(), // Initialize recentShares
+          hashrate: 0 // Initialize hashrate property
         }
       };
       this.miners.set(address, minerData);
@@ -255,39 +258,52 @@ export class SharesManager {
   calcHashRates() {
     let totalHashRate = 0;
     const baseWindowSize = 10 * 60 * 1000; // 10 minutes base window
+    const now = Date.now();
 
     this.miners.forEach((minerData, address) => {
-      const now = Date.now();
+      try {
+        const workerStats = minerData.workerStats;
+        const recentShares = workerStats.recentShares.toArray();
+        
+        if (recentShares.length === 0) return;
 
-      // Adjust the window size dynamically based on miner's activity
-      const sharesCount = minerData.workerStats.recentShares.length;
-      const windowSize = Math.min(baseWindowSize, sharesCount * 1000); // Minimum 1 second per share, max 10 min
+        // Adjust the window size dynamically based on miner's activity
+        const oldestShareTime = recentShares[0].timestamp;
+        const windowSize = Math.min(baseWindowSize, now - oldestShareTime);
 
-      // Extract relevant shares from recentShares
-      const relevantShares = minerData.workerStats.recentShares.toArray().filter(share => now - share.timestamp <= windowSize);
+        // Filter relevant shares
+        const relevantShares = recentShares.filter(share => now - share.timestamp <= windowSize);
 
-      if (relevantShares.length === 0) return;
+        if (relevantShares.length === 0) return;
 
-      // Weighted average based on time proximity
-      let totalDifficulty = 0;
-      let totalWeight = 0;
-      relevantShares.forEach((share, index) => {
-        const weight = 1 + (index / relevantShares.length); // More recent shares get more weight
-        totalDifficulty += share.difficulty * weight;
-        totalWeight += weight;
-      });
+        // Calculate weighted average difficulty
+        let totalWeightedDifficulty = 0;
+        let totalWeight = 0;
+        relevantShares.forEach((share, index) => {
+          const age = (now - share.timestamp) / windowSize;
+          const weight = Math.exp(-5 * age); // Exponential decay
+          totalWeightedDifficulty += share.difficulty * weight;
+          totalWeight += weight;
+        });
 
-      const avgDifficulty = totalDifficulty / totalWeight;
-      const timeDifference = (now - relevantShares[0].timestamp) / 1000; // in seconds
+        const avgDifficulty = totalWeightedDifficulty / totalWeight;
+        const timeDifference = (now - relevantShares[relevantShares.length - 1].timestamp) / 1000; // in seconds
 
-      const workerHashRate = (avgDifficulty * relevantShares.length) / timeDifference;
-      metrics.updateGaugeValue(minerHashRateGauge, [minerData.workerStats.workerName, address], workerHashRate);
-      totalHashRate += workerHashRate;
+        const workerHashRate = (avgDifficulty * relevantShares.length) / timeDifference;
+        
+        metrics.updateGaugeValue(minerHashRateGauge, [workerStats.workerName, address], workerHashRate);
+        totalHashRate += workerHashRate;
+
+        // Update worker's hashrate in workerStats
+        workerStats.hashrate = workerHashRate;
+      } catch (error) {
+        this.monitoring.error(`Error calculating hashrate for miner ${address}: ${error}`);
+      }
     });
 
     metrics.updateGaugeValue(poolHashRateGauge, ['pool', this.poolAddress], totalHashRate);
     if (DEBUG) {
-      this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate} GH/s`);
+      this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate.toFixed(6)} GH/s`);
     }
   }
 
@@ -352,7 +368,6 @@ export class SharesManager {
           this.monitoring.debug(`SharesManager: VarDiff - Adjusting difficulty for ${stats.workerName} from ${stats.minDiff} to ${newDiff}`);
           stats.minDiff = newDiff;
           this.updateSocketDifficulty(address, newDiff);
-          varDiff.labels(stats.workerName).set(newDiff);
         } else {
           this.monitoring.debug(`SharesManager: VarDiff - No change in difficulty for ${stats.workerName} (current difficulty: ${stats.minDiff})`);
         }

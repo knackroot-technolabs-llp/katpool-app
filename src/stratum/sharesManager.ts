@@ -53,6 +53,8 @@ export class SharesManager {
   private poolAddress: string;
   private pushGateway: Pushgateway<RegistryContentType>;
   private monitoring: Monitoring;
+  private shareWindow: Denque<Contribution>;
+  private lastAllocationTime: number;
 
   constructor(poolAddress: string, pushGatewayUrl: string) {
     this.poolAddress = poolAddress;
@@ -60,6 +62,8 @@ export class SharesManager {
     this.pushGateway = new Pushgateway<RegistryContentType>(pushGatewayUrl);
     this.startHashRateLogging(60000);
     this.startStatsThread(); // Start the stats logging thread
+    this.shareWindow = new Denque();
+    this.lastAllocationTime = Date.now();
   }
 
   getOrCreateWorkerStats(workerName: string, minerData: MinerData): WorkerStats {
@@ -169,6 +173,9 @@ export class SharesManager {
     }
 
     if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);
+
+    const share = { minerId, address, difficulty, timestamp: Date.now() };
+    this.shareWindow.push(share);
   }
 
   startStatsThread() {
@@ -332,5 +339,15 @@ export class SharesManager {
         socket.data.difficulty = newDifficulty;
       });
     }
+  }
+
+  getSharesSinceLastAllocation(): Contribution[] {
+    const currentTime = Date.now();
+    const shares = [];
+    while (this.shareWindow.length > 0 && (this.shareWindow.peekFront()?.timestamp ?? 0) >= this.lastAllocationTime) {
+      shares.push(this.shareWindow.shift()!);
+    }
+    this.lastAllocationTime = currentTime;
+    return shares;
   }
 }

@@ -48,9 +48,11 @@ export default class Pool {
     let totalWork = 0;
     const walletHashrateMap = new Map<string, number>();
 
-    // Process contributions within the sliding window
-    for (const contribution of this.sharesManager.dumpContributions(10000)) { // 10 seconds window
-      const { address, difficulty, minerId } = contribution;
+    // Get all shares since the last allocation
+    const shares = this.sharesManager.getSharesSinceLastAllocation();
+
+    for (const share of shares) {
+      const { address, difficulty, minerId } = share;
 
       // Aggregate work by address
       if (!works.has(address)) {
@@ -94,7 +96,7 @@ export default class Pool {
       await this.database.addBalance(work.minerId, address, share);
 
       // Track rewards for the miner
-      this.pushMetrics.updateMinerRewardGauge(address, work.minerId, 'block_hash_placeholder'); // Replace 'block_hash_placeholder' with the actual block hash
+      this.pushMetrics.updateMinerRewardGauge(address, work.minerId, 'block_hash_placeholder');
 
       if (DEBUG) {
         this.monitoring.debug(`Pool: Reward of ${sompiToKaspaStringWithSuffix(share, this.treasury.processor.networkId!)} was ALLOCATED to ${work.minerId} with difficulty ${work.difficulty}`);

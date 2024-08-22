@@ -309,6 +309,7 @@ export class SharesManager {
         if (newDiff !== stats.minDiff) {
           this.monitoring.debug(`shareManager: VarDiff - Adjusting difficulty for ${stats.workerName} from ${stats.minDiff} to ${newDiff}`);
           stats.minDiff = newDiff;
+          this.updateSocketDifficulty(address, newDiff);
         } else {
           this.monitoring.debug(`shareManager: VarDiff - No change in difficulty for ${stats.workerName} (current difficulty: ${stats.minDiff})`);
         }
@@ -322,5 +323,14 @@ export class SharesManager {
         }
       });
     }, intervalMs);
+  }
+
+  updateSocketDifficulty(address: string, newDifficulty: number) {
+    const minerData = this.miners.get(address);
+    if (minerData) {
+      minerData.sockets.forEach(socket => {
+        socket.data.difficulty = newDifficulty;
+      });
+    }
   }
 }

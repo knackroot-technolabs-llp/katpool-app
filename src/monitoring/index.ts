@@ -10,13 +10,9 @@ export default class Monitoring {
   private logQueue: PQueue;
   private debugEnabled: boolean;
 
-  constructor(debugEnabled: boolean = false) {
+  constructor() {
     this.logQueue = new PQueue({ concurrency: 1 });
-    this.debugEnabled = debugEnabled;
-  }
-
-  setDebugEnabled(enabled: boolean) {
-    this.debugEnabled = enabled;
+    this.debugEnabled = process.env.DEBUG === '1';
   }
 
   log(message: string) {

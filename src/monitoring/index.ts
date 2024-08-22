@@ -8,9 +8,15 @@ interface LogJobData {
 
 export default class Monitoring {
   private logQueue: PQueue;
+  private debugEnabled: boolean;
 
-  constructor() {
+  constructor(debugEnabled: boolean = false) {
     this.logQueue = new PQueue({ concurrency: 1 });
+    this.debugEnabled = debugEnabled;
+  }
+
+  setDebugEnabled(enabled: boolean) {
+    this.debugEnabled = enabled;
   }
 
   log(message: string) {
@@ -18,7 +24,9 @@ export default class Monitoring {
   }
 
   debug(message: string) {
-    this.logQueue.add(() => this.processLog({ level: 'DEBUG', message }));
+    if (this.debugEnabled) {
+      this.logQueue.add(() => this.processLog({ level: 'DEBUG', message }));
+    }
   }
 
   error(message: string) {

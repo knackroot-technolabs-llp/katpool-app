@@ -176,6 +176,41 @@ export class SharesManager {
 
     const share = { minerId, address, difficulty, timestamp: Date.now() };
     this.shareWindow.push(share);
+
+    // Implement variable difficulty
+    this.updateDifficulty(minerId);
+  }
+
+  private updateDifficulty(minerId: string): void {
+    const workerStats = this.miners.get(minerId)?.workerStats;
+    if (!workerStats) return;
+
+    const now = Date.now();
+    const elapsedMs = now - workerStats.varDiffStartTime;
+
+    if (elapsedMs >= 120000) { // 120000ms = 2 minutes
+      const shareRate = workerStats.varDiffSharesFound / (elapsedMs / 1000);
+      const targetShareRate = 60 / 60; // 60 shares per minute
+
+      let newDifficulty = workerStats.minDiff;
+
+      if (shareRate > targetShareRate * 1.1) {
+        newDifficulty *= 1.1;
+      } else if (shareRate < targetShareRate * 0.9) {
+        newDifficulty /= 1.1;
+      }
+
+      newDifficulty = Math.max(newDifficulty, 1);
+
+      if (newDifficulty !== workerStats.minDiff) {
+        workerStats.minDiff = newDifficulty;
+        this.monitoring.log(`SharesManager: Updated difficulty for ${minerId} to ${newDifficulty}`);
+        varDiff.labels(minerId).set(newDifficulty);
+      }
+
+      workerStats.varDiffStartTime = now;
+      workerStats.varDiffSharesFound = 0;
+    }
   }
 
   startStatsThread() {
@@ -297,7 +332,7 @@ export class SharesManager {
         const shareRate = (sharesFound / elapsedSeconds) * 60; // Convert to per minute
         const targetRate = sharesPerMin;
 
-        if (DEBUG) this.monitoring.debug(`shareManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedSeconds: ${elapsedSeconds}, shareRate: ${shareRate}, targetRate: ${targetRate}, currentDiff: ${stats.minDiff}`);
+        if (DEBUG) this.monitoring.debug(`SharesManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedSeconds: ${elapsedSeconds}, shareRate: ${shareRate}, targetRate: ${targetRate}, currentDiff: ${stats.minDiff}`);
 
         let newDiff = stats.minDiff;
 
@@ -314,19 +349,19 @@ export class SharesManager {
         newDiff = Math.max(newDiff, minDifficulty);
 
         if (newDiff !== stats.minDiff) {
-          this.monitoring.debug(`shareManager: VarDiff - Adjusting difficulty for ${stats.workerName} from ${stats.minDiff} to ${newDiff}`);
+          this.monitoring.debug(`SharesManager: VarDiff - Adjusting difficulty for ${stats.workerName} from ${stats.minDiff} to ${newDiff}`);
           stats.minDiff = newDiff;
           this.updateSocketDifficulty(address, newDiff);
+          varDiff.labels(stats.workerName).set(newDiff);
         } else {
-          this.monitoring.debug(`shareManager: VarDiff - No change in difficulty for ${stats.workerName} (current difficulty: ${stats.minDiff})`);
+          this.monitoring.debug(`SharesManager: VarDiff - No change in difficulty for ${stats.workerName} (current difficulty: ${stats.minDiff})`);
         }
 
         stats.varDiffSharesFound = 0;
         stats.varDiffStartTime = now;
 
         if (varDiffStats) {
-          this.monitoring.log(`shareManager: VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsed: ${elapsedSeconds.toFixed(2)}, shareRate: ${shareRate.toFixed(2)}, newDiff: ${stats.minDiff}`);
-          metrics.updateGaugeValue(varDiff, [stats.workerName], stats.minDiff);
+          this.monitoring.log(`SharesManager: VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsed: ${elapsedSeconds.toFixed(2)}, shareRate: ${shareRate.toFixed(2)}, newDiff: ${stats.minDiff}`);
         }
       });
     }, intervalMs);

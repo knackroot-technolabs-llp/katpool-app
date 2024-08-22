@@ -15,6 +15,7 @@ export default class Pool {
   private sharesManager: SharesManager; // Add SharesManager property
   private pushMetrics: PushMetrics; // Add PushMetrics property
   private lastProcessedTimestamp = 0; // Add timestamp check
+  private duplicateEventCount = 0;
 
   constructor(treasury: Treasury, stratum: Stratum, sharesManager: SharesManager) {
     this.treasury = treasury;
@@ -34,10 +35,12 @@ export default class Pool {
     this.treasury.on('coinbase', (minerReward: bigint, poolFee: bigint) => {
       const currentTimestamp = Date.now();
       if (currentTimestamp - this.lastProcessedTimestamp < 1000) { // 1 second cooldown
-        this.monitoring.debug(`Pool: Skipping duplicate coinbase event. Last processed: ${this.lastProcessedTimestamp}, Current: ${currentTimestamp}`);
+        this.duplicateEventCount++;
+        this.monitoring.debug(`Pool: Skipping duplicate coinbase event. Last processed: ${this.lastProcessedTimestamp}, Current: ${currentTimestamp}, Duplicate count: ${this.duplicateEventCount}`);
         return;
       }
       this.lastProcessedTimestamp = currentTimestamp;
+      this.duplicateEventCount = 0;
       this.monitoring.log(`Pool: Processing coinbase event. Timestamp: ${currentTimestamp}`);
       this.allocate(minerReward, poolFee).catch(console.error)
     });

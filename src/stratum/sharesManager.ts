@@ -273,51 +273,54 @@ export class SharesManager {
   }
 
   startVardiffThread(sharesPerMin: number, varDiffStats: boolean, clampPow2: boolean) {
+    const intervalMs = 120000; // Run every 2 minutes
+    const minElapsedSeconds = 30; // Minimum 30 seconds between adjustments
+    const adjustmentFactor = 1.1; // 10% adjustment
+    const minDifficulty = 1; // Minimum difficulty
+
     setInterval(() => {
       const now = Date.now();
 
-      this.miners.forEach(minerData => {
+      this.miners.forEach((minerData, address) => {
         const stats = minerData.workerStats;
-        const elapsedMinutes = (now - stats.varDiffStartTime) / 60000; // Convert ms to minutes
-        if (elapsedMinutes < 1) return;
+        const elapsedSeconds = (now - stats.varDiffStartTime) / 1000;
+        if (elapsedSeconds < minElapsedSeconds) return;
 
         const sharesFound = stats.varDiffSharesFound;
-        const shareRate = sharesFound / elapsedMinutes;
+        const shareRate = (sharesFound / elapsedSeconds) * 60; // Convert to per minute
         const targetRate = sharesPerMin;
 
-        if (DEBUG) this.monitoring.debug(`shareManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedMinutes: ${elapsedMinutes}, shareRate: ${shareRate}, targetRate: ${targetRate}`);
+        if (DEBUG) this.monitoring.debug(`shareManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedSeconds: ${elapsedSeconds}, shareRate: ${shareRate}, targetRate: ${targetRate}, currentDiff: ${stats.minDiff}`);
 
-        this.monitoring.debug(`shareManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedMinutes: ${elapsedMinutes}, shareRate: ${shareRate}, targetRate: ${targetRate}, currentDiff: ${stats.minDiff}`);
+        let newDiff = stats.minDiff;
 
-        if (shareRate > targetRate * 1.1) {
-          let newDiff = stats.minDiff * 1.2;
-          if (clampPow2) {
-            newDiff = Math.pow(2, Math.floor(Math.log2(newDiff)));
-          }
-          this.monitoring.debug(`shareManager: VarDiff - Increasing difficulty for ${stats.workerName} from ${stats.minDiff} to ${newDiff}`);
-          stats.minDiff = newDiff;
-        } else if (shareRate < targetRate * 0.9) {
-          let newDiff = stats.minDiff / 1.2;
-          if (clampPow2) {
-            newDiff = Math.pow(2, Math.ceil(Math.log2(newDiff)));
-          }
-          if (newDiff < 1) {
-            newDiff = 1;
-          }
-          this.monitoring.debug(`shareManager: VarDiff - Decreasing difficulty for ${stats.workerName} from ${stats.minDiff} to ${newDiff}`);
+        if (shareRate > targetRate * 1.2) {
+          newDiff = stats.minDiff * adjustmentFactor;
+        } else if (shareRate < targetRate * 0.8) {
+          newDiff = stats.minDiff / adjustmentFactor;
+        }
+
+        if (clampPow2) {
+          newDiff = Math.pow(2, Math.round(Math.log2(newDiff)));
+        }
+
+        newDiff = Math.max(newDiff, minDifficulty);
+
+        if (newDiff !== stats.minDiff) {
+          this.monitoring.debug(`shareManager: VarDiff - Adjusting difficulty for ${stats.workerName} from ${stats.minDiff} to ${newDiff}`);
           stats.minDiff = newDiff;
         } else {
           this.monitoring.debug(`shareManager: VarDiff - No change in difficulty for ${stats.workerName} (current difficulty: ${stats.minDiff})`);
-        };
+        }
 
         stats.varDiffSharesFound = 0;
         stats.varDiffStartTime = now;
 
         if (varDiffStats) {
-          this.monitoring.log(`shareManager: VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsed: ${elapsedMinutes.toFixed(2)}, shareRate: ${shareRate.toFixed(2)}, newDiff: ${stats.minDiff}`);
+          this.monitoring.log(`shareManager: VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsed: ${elapsedSeconds.toFixed(2)}, shareRate: ${shareRate.toFixed(2)}, newDiff: ${stats.minDiff}`);
           metrics.updateGaugeValue(varDiff, [stats.workerName], stats.minDiff);
         }
       });
-    }, 300000); // Run every 5 minutes
+    }, intervalMs);
   }
 }

@@ -10,9 +10,14 @@
     "templates": {
       "cacheSize": 300
     },
-    "difficulty": 2,
-    "sharesPerMinute": 20
-
+    "difficulty": 1,
+    "sharesPerMinute": 20,
+    "varDiff": {
+      "minDifficulty": 0.5,
+      "intervalMs": 120000,
+      "minElapsedSeconds": 30,
+      "adjustmentFactor": 1.1
+    }
   },
   "treasury": {
     "fee": 5

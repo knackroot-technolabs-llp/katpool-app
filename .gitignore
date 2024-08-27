@@ -8,3 +8,4 @@ bun*
 postgres*
 prometheus_data
 db_backup*
+katpool.code-workspace

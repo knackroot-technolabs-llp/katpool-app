@@ -58,7 +58,7 @@ export default class Templates {
     this.rpc.addEventListener('new-block-template', async () => {
       const template = (await this.rpc.getBlockTemplate({
         payAddress: this.address,
-        extraData: "Ghostpool"
+        extraData: "Katpool"
       })).block
 
       if (this.templates.has(template.header.hash)) return

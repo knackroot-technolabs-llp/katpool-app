@@ -111,7 +111,7 @@ export default class Stratum extends EventEmitter {
                 varDiffWindow: 0,
                 minDiff: this.difficulty,
                 recentShares: new Denque<{ timestamp: number, difficulty: number }>(),
-                hashrate: 0, // Add this line
+                hashrate: 0,
               }
             });
           } else {

@@ -55,6 +55,7 @@ export default class Templates {
   }
 
   async register (callback: (id: string, hash: string, timestamp: bigint) => void) {
+    this.monitoring.log(`Templates: Registering new template callback`);
     this.rpc.addEventListener('new-block-template', async () => {
       const template = (await this.rpc.getBlockTemplate({
         payAddress: this.address,

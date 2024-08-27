@@ -42,6 +42,7 @@ export default class Stratum extends EventEmitter {
   }
 
   announceTemplate(id: string, hash: string, timestamp: bigint) {
+    this.monitoring.log(`Stratum: Announcing new template ${id}`);
     const tasksData: { [key in Encoding]?: string } = {};
     Object.values(Encoding).filter(value => typeof value !== 'number').forEach(value => {
       const encoding = Encoding[value as keyof typeof Encoding];

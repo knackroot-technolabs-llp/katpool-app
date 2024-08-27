@@ -401,4 +401,9 @@ export class SharesManager {
     this.lastAllocationTime = currentTime;
     return shares;
   }
+
+  submitShare(minerAddress: string, workerName: string, jobId: string, nonce: string, difficulty: number) {
+    this.monitoring.log(`SharesManager: Processing share from ${minerAddress}/${workerName}`);
+    // ... existing code ...
+  }
 }

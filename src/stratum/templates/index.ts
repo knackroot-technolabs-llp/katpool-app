@@ -1,4 +1,4 @@
-import type { IBlock, RpcClient } from "../../../wasm/kaspa"
+import type { IBlock, RpcClient, IRawBlock, IRawHeader } from "../../../wasm/kaspa"
 import { Header, PoW } from "../../../wasm/kaspa"
 import Jobs from "./jobs"
 import { minedBlocksGauge, paidBlocksGauge } from '../../prometheus';
@@ -60,13 +60,17 @@ export default class Templates {
       const template = (await this.rpc.getBlockTemplate({
         payAddress: this.address,
         extraData: "Katpool"
-      })).block
+      })).block as IRawBlock;
 
-      if (this.templates.has(template.header.hash)) return
+      // Convert IRawHeader to IHeader
+      const header = new Header(template.header);
+      const headerHash = header.finalize();
 
-      const proofOfWork = new PoW(template.header)
-      this.templates.set(template.header.hash, [ template, proofOfWork ])
-      const id = this.jobs.deriveId(template.header.hash)
+      if (this.templates.has(headerHash)) return
+
+      const proofOfWork = new PoW(header)
+      this.templates.set(headerHash, [ template as IBlock, proofOfWork ])
+      const id = this.jobs.deriveId(headerHash)
 
       //if (DEBUG) this.monitoring.debug(`Templates: templates.size: ${this.templates.size}, cacheSize: ${this.cacheSize}`)
 
@@ -75,7 +79,7 @@ export default class Templates {
         this.jobs.expireNext()
       }
 
-      callback(id, proofOfWork.prePoWHash, template.header.timestamp)
+      callback(id, proofOfWork.prePoWHash, header.timestamp)
     })
 
     await this.rpc.subscribeNewBlockTemplate()

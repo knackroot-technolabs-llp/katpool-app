@@ -33,9 +33,10 @@ TREASURY_PRIVATE_KEY=<private key>
 POSTGRES_USER=<db-user>
 POSTGRES_PASSWORD=<db-passwd>
 POSTGRES_DB=<db-name>
-POSTGRES_HOSTNAME='kaspool-db'
-DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@kaspool-db:5432/${POSTGRES_DB}"
-PUSHGATEWAY="http://kaspool-pushgateway:9091"
+POSTGRES_HOSTNAME='katpool-db' # Configure the hostname.
+DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOSTNAME}:5432/${POSTGRES_DB}"
+PUSHGATEWAY="http://katpool-pushgateway:9091" # Configure the pushgateway url.
+MONITOR="http://katpool-monitor:9302" # Configure the monitor url.
 DEBUG=1
 ```
 For now, all the instances share the same env var. However, in the future, it's better to set the private key to the payment app. kaspool-app instance won't need it.
@@ -56,6 +57,19 @@ Additionally:
 
 Check `config/config.json` and do the required configurations to your pool
 
+Here please prepend your own node. 
+
+If it fails, you can update the code in `index.ts` as
+
+```JS
+const rpc = new RpcClient({
+  resolver: new Resolver(), // Random assignment
+  encoding: Encoding.Borsh,
+  networkId: config.network,
+});
+
+```
+
 ### Container Images
 
 We have added public images to docker-compose.yml to make ieasier the deployment, but in case you want to do changes to the code and test it, you can create your own local image via:
@@ -65,7 +79,7 @@ docker build -t kaspool-app:0.65 .
 Dockerfile must be present int the same location where you are running this command.
 remember to modify docker-image.yml with your own image.
 
-### Start abd check the pool
+### Start and check the pool
 
 To start the pool, you need to run `docker compose up -d` or the required command depending of your dcker setup
 You can use `docker logs -f kaspool-app` to see the output of your pool instance. We recommned to use DEBUG=1 at the beginning.
@@ -90,18 +104,25 @@ To install dependencies:
 bun install
 ```
 
-## How the Database si setup
+## How the Database is setup
 We are using Postgres as our database:
 ```sql
-CREATE TABLE miners_balance (
+CREATE TABLE IF NOT EXISTS miners_balance (
   id VARCHAR(255) PRIMARY KEY, 
   miner_id VARCHAR(255), 
   wallet VARCHAR(255),
   balance NUMERIC
 );
-CREATE TABLE wallet_total (
+CREATE TABLE IF NOT EXISTS wallet_total (
   address VARCHAR(255) PRIMARY KEY,
   total NUMERIC
+);
+CREATE TABLE IF NOT EXISTS payments (
+    id SERIAL PRIMARY KEY,
+    wallet_address VARCHAR(255) NOT NULL,
+    amount NUMERIC(20, 8) NOT NULL,
+    timestamp TIMESTAMP DEFAULT NOW(),
+    transaction_hash VARCHAR(255) NOT NULL
 );
 ```
 

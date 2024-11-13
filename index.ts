@@ -24,8 +24,15 @@ async function sendConfig() {
     const configPath = path.resolve('./config/config.json');
     const configData = fs.readFileSync(configPath, 'utf-8');
 
-    const response = await axios.post('http://kaspool-monitor:9302/postconfig', {
-      config: JSON.parse(configData)
+    // Check if MONITOR is configured
+    if (!process.env.MONITOR) {
+      monitoring.error(`MONITOR: Error - MONITOR environment variable is not set.`);
+      process.exit(1);
+    }
+
+    const MONITOR_ROOT_URL = process.env.MONITOR;
+    const response = await axios.post(`${MONITOR_ROOT_URL}/postconfig`, {
+      config: JSON.parse(configData),
     });
 
     monitoring.log(`Main: Config sent to API server. Response status: ${response.status}`);

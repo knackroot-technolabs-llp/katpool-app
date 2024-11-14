@@ -1,5 +1,5 @@
 # Use an official PostgreSQL image as the base
-FROM postgres:16.3
+FROM postgres:16.4
 
 # Install cron
 RUN apt-get update && apt-get install -y cron

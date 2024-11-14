@@ -1,4 +1,4 @@
-name: Docker Push kaspool-app image
+name: Docker Push katpool-app image
 
 on:
   push:

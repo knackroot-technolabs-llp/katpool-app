@@ -19,19 +19,17 @@ if (process.env.DEBUG == "1") {
 
 // Send config.json to API server
 async function sendConfig() {
-  if (DEBUG) monitoring.debug(`Main: Trying to send config to kaspool-monitor`);
+  if (DEBUG) monitoring.debug(`Main: Trying to send config to katpool-monitor`);
   try {
     const configPath = path.resolve('./config/config.json');
     const configData = fs.readFileSync(configPath, 'utf-8');
 
-    // Check if MONITOR is configured
-    if (!process.env.MONITOR) {
-      monitoring.error(`MONITOR: Error - MONITOR environment variable is not set.`);
-      process.exit(1);
+    const katpoolMonitor = process.env.MONITOR;
+    if (!katpoolMonitor) {
+      throw new Error('Environment variable MONITOR is not set.');
     }
 
-    const MONITOR_ROOT_URL = process.env.MONITOR;
-    const response = await axios.post(`${MONITOR_ROOT_URL}/postconfig`, {
+    const response = await axios.post(`${katpoolMonitor}/postconfig`, {
       config: JSON.parse(configData),
     });
 
@@ -42,7 +40,7 @@ async function sendConfig() {
 }
 
 const monitoring = new Monitoring();
-monitoring.log(`Main: Starting kaspool App`)
+monitoring.log(`Main: Starting katpool App`)
 
 dotenv.config();
 
@@ -69,16 +67,16 @@ if (!treasuryPrivateKey) {
 }
 
 
-const kaspoolPshGw = process.env.PUSHGATEWAY;
-if (!kaspoolPshGw) {
+const katpoolPshGw = process.env.PUSHGATEWAY;
+if (!katpoolPshGw) {
   throw new Error('Environment variable PUSHGATEWAY is not set.');
 }
-export const metrics = new PushMetrics(kaspoolPshGw);
+export const metrics = new PushMetrics(katpoolPshGw);
 
 sendConfig();
 
 const treasury = new Treasury(rpc, serverInfo.networkId, treasuryPrivateKey, config.treasury.fee);
 const templates = new Templates(rpc, treasury.address, config.stratum.templates.cacheSize);
 
-const stratum = new Stratum(templates, config.stratum.port, config.stratum.difficulty, kaspoolPshGw, treasury.address, config.stratum.sharesPerMinute);
+const stratum = new Stratum(templates, config.stratum.port, config.stratum.difficulty, katpoolPshGw, treasury.address, config.stratum.sharesPerMinute);
 const pool = new Pool(treasury, stratum, stratum.sharesManager);

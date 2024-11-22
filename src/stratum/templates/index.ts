@@ -54,7 +54,7 @@ export default class Templates {
     return report.report.type
   }
 
-  async register (callback: (id: string, hash: string, timestamp: bigint) => void) {
+  async register (callback: (id: string, hash: string, timestamp: bigint, headerHash: string) => void) {
     this.monitoring.log(`Templates: Registering new template callback`);
     this.rpc.addEventListener('new-block-template', async () => {
       const template = (await this.rpc.getBlockTemplate({
@@ -79,7 +79,7 @@ export default class Templates {
         this.jobs.expireNext()
       }
 
-      callback(id, proofOfWork.prePoWHash, header.timestamp)
+      callback(id, proofOfWork.prePoWHash, header.timestamp, headerHash)
     })
 
     await this.rpc.subscribeNewBlockTemplate()

@@ -31,7 +31,7 @@ export default class Stratum extends EventEmitter {
     this.server = new Server(port, initialDifficulty, this.onMessage.bind(this));
     this.difficulty = initialDifficulty;
     this.templates = templates;
-    this.templates.register((id, hash, timestamp) => this.announceTemplate(id, hash, timestamp));
+    this.templates.register((id, hash, timestamp, headerHash) => this.announceTemplate(id, hash, timestamp, headerHash));
     this.monitoring.log(`Stratum: Initialized with difficulty ${this.difficulty}`);
 
     // Start the VarDiff thread
@@ -41,15 +41,16 @@ export default class Stratum extends EventEmitter {
 
   }
 
-  announceTemplate(id: string, hash: string, timestamp: bigint) {
+  announceTemplate(id: string, hash: string, timestamp: bigint, headerHash: string) {
     this.monitoring.log(`Stratum: Announcing new template ${id}`);
     const tasksData: { [key in Encoding]?: string } = {};
     Object.values(Encoding).filter(value => typeof value !== 'number').forEach(value => {
       const encoding = Encoding[value as keyof typeof Encoding];
       const task: Event<'mining.notify'> = {
         method: 'mining.notify',
-        params: [id, ...encodeJob(hash, timestamp, encoding)]
+        params: [id, encodeJob(hash, timestamp, encoding, headerHash)]
       };
+      if(encoding === Encoding.Custom) task.params.push(Number(timestamp))
       tasksData[encoding] = JSON.stringify(task);
     });
     this.subscriptors.forEach((socket) => {

@@ -44,7 +44,7 @@ export const errors: { [key: string]: Error } = {
 export interface EventMappings {
   'set_extranonce': [ string ] // 2 bytes
   'mining.set_difficulty': [ number ] // difficulty
-  'mining.notify': [ string, string, string? ] // jobid, bigpow && possibly timestamp on 4 u64 protocol
+  'mining.notify': [ string, string | number[], number? ] // jobid, bigpow && possibly timestamp on 4 u64 protocol
 }
 
 export interface Event<M extends keyof EventMappings = keyof EventMappings> {

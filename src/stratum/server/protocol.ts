@@ -15,7 +15,7 @@ export type Request<M extends keyof ResponseMappings = keyof ResponseMappings> =
 }[ M ]
 
 export interface ResponseMappings {
-  "mining.subscribe": [ boolean, string ] // EthereumStratum/1.0.0
+  "mining.subscribe": [ boolean, string, number ] // EthereumStratum/1.0.0
   'mining.authorize': boolean // TRUE
   'mining.submit': boolean // TRUE
 }
@@ -42,9 +42,9 @@ export const errors: { [key: string]: Error } = {
 }
 
 export interface EventMappings {
-  'set_extranonce': [ string ] // 2 bytes
+  'mining.set_extranonce': any[] // 2 bytes
   'mining.set_difficulty': [ number ] // difficulty
-  'mining.notify': [ string, string | number[], number? ] // jobid, bigpow && possibly timestamp on 4 u64 protocol
+  'mining.notify': [ string, string | string[], number? ] // jobid, bigpow && possibly timestamp on 4 u64 protocol
 }
 
 export interface Event<M extends keyof EventMappings = keyof EventMappings> {

@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto';
 import Server, { type Miner, type Worker } from './server';
 import { type Request, type Response, type Event, errors } from './server/protocol';
 import type Templates from './templates/index.ts';
-import { Address } from "../../wasm/kaspa";
+import { Address, type IRawHeader } from "../../wasm/kaspa";
 import { Encoding, encodeJob } from './templates/jobs/encoding.ts';
 import { SharesManager } from './sharesManager';
 import { minerjobSubmissions, jobsNotFound } from '../prometheus'
@@ -23,6 +23,7 @@ export default class Stratum extends EventEmitter {
   private monitoring: Monitoring
   sharesManager: SharesManager;
   private minerDataLock = new Mutex();
+  extraNonce : string;
 
   constructor(templates: Templates, port: number, initialDifficulty: number, pushGatewayUrl: string, poolAddress: string, sharesPerMin: number) {
     super();
@@ -31,24 +32,55 @@ export default class Stratum extends EventEmitter {
     this.server = new Server(port, initialDifficulty, this.onMessage.bind(this));
     this.difficulty = initialDifficulty;
     this.templates = templates;
-    this.templates.register((id, hash, timestamp, headerHash) => this.announceTemplate(id, hash, timestamp, headerHash));
+    this.templates.register((id, hash, timestamp, templateHeader, headerHash) => this.announceTemplate(id, hash, timestamp, templateHeader, headerHash));
     this.monitoring.log(`Stratum: Initialized with difficulty ${this.difficulty}`);
+    this.extraNonce = "";
 
     // Start the VarDiff thread
     const varDiffStats = true; // Enable logging of VarDiff stats
     const clampPow2 = true; // Enable clamping difficulty to powers of 2
     this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
 
+    this.getExtraNonce();
   }
 
-  announceTemplate(id: string, hash: string, timestamp: bigint, headerHash: string) {
+  getExtraNonce() {
+    if (!process.env.EXTRANONCE_SIZE) {
+      console.error("Extranonce size is not set in env.")
+      process.exit(1);
+    }
+    var extranonceSize = Number(process.env.EXTRANONCE_SIZE);
+    var maxExtranonce = Math.pow(2, 8 * Math.min(extranonceSize, 3)) - 1;
+    var nextExtranonce = 0;
+          
+    var lExtranonce = 0;
+    if (extranonceSize > 0) {
+      lExtranonce = nextExtranonce;
+
+      if (nextExtranonce < maxExtranonce) {
+        nextExtranonce++;
+      } else {
+        nextExtranonce = 0;
+        this.monitoring.log(
+          "WARN : Wrapped extranonce! New clients may be duplicating work..."
+        );
+      }
+    }
+
+    // Format extranonce as a hexadecimal string with padding
+    if (extranonceSize > 0) {
+      this.extraNonce = lExtranonce.toString(16).padStart(extranonceSize * 2, "0");
+    }    
+  }
+
+  announceTemplate(id: string, hash: string, timestamp: bigint, templateHeader: IRawHeader, headerHash: string) {
     this.monitoring.log(`Stratum: Announcing new template ${id}`);
     const tasksData: { [key in Encoding]?: string } = {};
     Object.values(Encoding).filter(value => typeof value !== 'number').forEach(value => {
       const encoding = Encoding[value as keyof typeof Encoding];
       const task: Event<'mining.notify'> = {
         method: 'mining.notify',
-        params: [id, encodeJob(hash, timestamp, encoding, headerHash)]
+        params: [id, encodeJob(hash, timestamp, encoding, templateHeader, headerHash)]
       };
       if(encoding === Encoding.Custom) task.params.push(Number(timestamp))
       tasksData[encoding] = JSON.stringify(task);
@@ -81,8 +113,10 @@ export default class Stratum extends EventEmitter {
       switch (request.method) {
         case 'mining.subscribe': {
           if (this.subscriptors.has(socket)) throw Error('Already subscribed');
+          const minerType = request.params[0].toLowerCase();
+          socket.data.encoding = Encoding.Custom;
           this.subscriptors.add(socket);
-          response.result = [true, 'EthereumStratum/1.0.0'];
+          response.result = [true, this.extraNonce, 8 - Math.floor(this.extraNonce.length / 2)];
           this.emit('subscription', socket.remoteAddress, request.params[0]);
           this.monitoring.log(`Stratum: Miner subscribed from ${socket.remoteAddress}`);
           break;
@@ -121,12 +155,18 @@ export default class Stratum extends EventEmitter {
             existingMinerData!.sockets = sockets;
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
           }
-
-          const event: Event<'set_extranonce'> = {
-            method: 'set_extranonce',
-            params: [randomBytes(4).toString('hex')]
+          const result: any[] = [
+            this.extraNonce, 
+            8 - Math.floor(this.extraNonce.length / 2)
+          ];
+          
+          const event: Event<'mining.set_extranonce'> = {
+            method: 'mining.set_extranonce',
+            params: [result]
           };
-          socket.write(JSON.stringify(event) + '\n');
+          if (this.extraNonce != "") {
+            socket.write(JSON.stringify(event) + '\n');
+          }          
           this.reflectDifficulty(socket);
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
           break;
@@ -154,6 +194,16 @@ export default class Stratum extends EventEmitter {
             if (DEBUG) this.monitoring.debug(`Stratum: Current difficulties - Worker: ${workerDiff}, Socket: ${socketDiff}`);
             const currentDifficulty = workerDiff || socketDiff;
             if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
+            // Add extranonce to noncestr if enabled and submitted nonce is shorter than
+            // expected (16 - <extranonce length> characters)
+            if (this.extraNonce !== "") {
+              const extranonce2Len = 16 - this.extraNonce.length;
+
+              if (request.params[2].length <= extranonce2Len) {
+                request.params[2] =
+                this.extraNonce + request.params[2].padStart(extranonce2Len, "0");
+              }
+            }
             await this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, BigInt('0x' + request.params[2]), this.templates).catch(err => {
               if (!(err instanceof Error)) throw err;
               switch (err.message) {

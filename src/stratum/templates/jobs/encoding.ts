@@ -50,9 +50,9 @@ function serializeBlockHeader(header:any) {
   writeHexString(hasher, header.utxoCommitment);
 
   const data = {
-      TS: header.timestamp,   
+      TS: 0n,   
       Bits: header.bits,      
-      Nonce: header.nonce,    
+      Nonce: 0n,    
       DAAScore: header.daaScore,  
       BlueScore: header.blueScore 
   };
@@ -77,7 +77,7 @@ function serializeBlockHeader(header:any) {
   return final;
 }
 
-function generateJobHeader(headerData: Uint8Array): string[] {
+function generateJobHeader(headerData: Uint8Array): number[] {
   const ids: BigInt[] = [];
   // Loop to read 8 bytes at a time
   for (let i = 0; i < headerData.length; i += 8) {
@@ -89,13 +89,13 @@ function generateJobHeader(headerData: Uint8Array): string[] {
       // Push the value to ids as BigInt
       ids.push(value);
   }
-  const final: string[] = [];
+  const final: number[] = [];
   // Process each value in ids (convert to hex and back to BigInt)
   for (const v of ids) {
       const asHex = v.toString(16);
       // Convert hex string back to BigInt
       const bb = BigInt('0x' + asHex);  // Prefix '0x' for valid hex format
-      final.push(bb.toString());
+      final.push(Number(bb));
   }
   return final;
 }

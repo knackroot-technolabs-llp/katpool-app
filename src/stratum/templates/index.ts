@@ -75,7 +75,7 @@ export default class Templates {
       //if (DEBUG) this.monitoring.debug(`Templates: templates.size: ${this.templates.size}, cacheSize: ${this.cacheSize}`)
 
       if (this.templates.size > this.cacheSize) {
-        this.templates.delete(this.templates.entries().next().value[0])
+        this.templates.delete(this.templates.entries().next().value![0])
         this.jobs.expireNext()
       }
 

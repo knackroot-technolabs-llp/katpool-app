@@ -78,11 +78,15 @@ export default class Stratum extends EventEmitter {
     const tasksData: { [key in Encoding]?: string } = {};
     Object.values(Encoding).filter(value => typeof value !== 'number').forEach(value => {
       const encoding = Encoding[value as keyof typeof Encoding];
+      const encodedParams = encodeJob(hash, timestamp, encoding, templateHeader, headerHash)
       const task: Event<'mining.notify'> = {
         method: 'mining.notify',
-        params: [id, encodeJob(hash, timestamp, encoding, templateHeader, headerHash)]
+        params: [id, encodedParams]
       };
-      if(encoding === Encoding.Custom) task.params.push(Number(timestamp))
+      if(encoding === Encoding.Custom) {
+        task.params.push(Number(timestamp));
+      }
+      console.log("Task params job Id:", task.params[0])
       tasksData[encoding] = JSON.stringify(task);
     });
     this.subscriptors.forEach((socket) => {
@@ -182,9 +186,11 @@ export default class Stratum extends EventEmitter {
             throw Error('Mismatching worker details');
           }
           const hash = this.templates.getHash(request.params[1]);
+          console.log("mining.submit ~ request.params :", request.params, hash)
           if (!hash) {
             if (DEBUG) this.monitoring.debug(`Stratum: Job not found - Address: ${address}, Worker Name: ${name}`);
             metrics.updateGaugeInc(jobsNotFound, [name, address]);
+            // throw Error("Hash not found")
           }
           else {
             const minerId = name;
@@ -204,23 +210,31 @@ export default class Stratum extends EventEmitter {
                 this.extraNonce + request.params[2].padStart(extranonce2Len, "0");
               }
             }
-            await this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, BigInt('0x' + request.params[2]), this.templates).catch(err => {
-              if (!(err instanceof Error)) throw err;
-              switch (err.message) {
-                case 'Duplicate share':
-                  response.error = errors['DUPLICATE_SHARE'];
-                  break;
-                case 'Stale header':
-                  response.error = errors['JOB_NOT_FOUND'];
-                  break;
-                case 'Invalid share':
-                  response.error = errors['LOW_DIFFICULTY_SHARE'];
-                  break;
-                default:
-                  throw err;
-              }
-              response.result = false;
-            });
+            try{
+              // console.log("this templates : ", this.templates);
+              this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, BigInt(request.params[2]), this.templates)
+            }
+            catch(err: any) {
+              console.log("error thrown : ", err);
+              // if (!(err instanceof Error)) throw err;
+              // switch (err.message) {
+              //   case 'Duplicate share':
+              //     console.log("DUPLICATE_SHARE")
+              //     response.error = errors['DUPLICATE_SHARE'];
+              //     break;
+              //   case 'Stale header':
+              //     console.log("Stale Header : JOB_NOT_FOUND")
+              //     response.error = errors['JOB_NOT_FOUND'];
+              //     break;
+              //   case 'Invalid share':
+              //     console.log("LOW_DIFFICULTY_SHARE")
+              //     response.error = errors['LOW_DIFFICULTY_SHARE'];
+              //     break;
+              //   default:
+              //     throw err;
+              // }
+              // response.result = false;
+            }
           }
           break;
         }

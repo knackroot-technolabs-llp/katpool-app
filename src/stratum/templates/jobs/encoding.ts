@@ -1,5 +1,7 @@
 import blake2b, { type Blake2b } from 'blake2b';
 import type { IRawHeader } from '../../../../wasm/kaspa/kaspa';
+import { blake2bInit, blake2bFinal, blake2bUpdate } from "blakejs";
+import struct from "python-struct";
 
 export enum Encoding {
   BigHeader,
@@ -77,6 +79,25 @@ function serializeBlockHeader(header:any) {
   return final;
 }
 
+export function calculateTarget(bits: any) {
+  const unshiftedExpt = bits >> 24n;
+  let mant = bits & BigInt("0xFFFFFF");
+  let expt;
+
+  if (unshiftedExpt <= 3n) {
+    mant = mant >> (8n * (3n - unshiftedExpt));
+    expt = 0n;
+  } else {
+    expt = 8n * ((bits >> 24n) - 3n);
+  }
+
+  return mant << expt;
+}
+
+const toLittle = (buffer: any) => {
+  return Buffer.from([...buffer].reverse())
+}
+
 function generateJobHeader(headerData: Uint8Array): number[] {
   const ids: BigInt[] = [];
   // Loop to read 8 bytes at a time
@@ -95,12 +116,65 @@ function generateJobHeader(headerData: Uint8Array): number[] {
       const asHex = v.toString(16);
       // Convert hex string back to BigInt
       const bb = BigInt('0x' + asHex);  // Prefix '0x' for valid hex format
-      final.push(Number(bb));
+      final.push(Number(bb.toString()));
   }
   return final;
 }
 
-export function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, templateHeader: IRawHeader, headerHash: string) {
+async function hasherSerializeHeader(header: any, isPrePow: boolean) {
+  const hasher = blake2bInit(32, Uint8Array.from(Buffer.from("BlockHash")));
+  const nonce = isPrePow ? "0" : header.nonce;
+  const timestamp = isPrePow ? "0" : header.timestamp;
+
+  blake2bUpdate(
+    hasher,
+    struct.pack("<HQ", header.version, header.parentsByLevel.length)
+  );
+  for (const parent of header.parentsByLevel) {
+    blake2bUpdate(hasher, struct.pack("<Q", parent.length));
+    for (const parentHash of parent) {
+      blake2bUpdate(hasher, Buffer.from(parentHash, "hex"));
+    }
+  }
+  blake2bUpdate(hasher, Buffer.from(header.hashMerkleRoot, "hex"));
+  blake2bUpdate(hasher, Buffer.from(header.acceptedIdMerkleRoot, "hex"));
+  blake2bUpdate(hasher, Buffer.from(header.utxoCommitment, "hex"));
+  blake2bUpdate(
+    hasher,
+    struct.pack(
+      "<QIQQQ",
+      timestamp,
+      Number(header.bits),
+      nonce,
+      Number(header.daaScore),
+      Number(header.blueScore)
+    )
+  );
+
+  const blueWork = header.blueWork;
+  const parsedBluework = Buffer.from(
+    blueWork.padStart(blueWork.length + (blueWork.length % 2), "0"),
+    "hex"
+  );
+
+  blake2bUpdate(hasher, struct.pack("<Q", parsedBluework.length));
+  blake2bUpdate(hasher, parsedBluework);
+
+  blake2bUpdate(hasher, Buffer.from(header.pruningPoint, "hex"));
+  return Buffer.from(blake2bFinal(hasher));
+}
+
+async function hasherSerializeJobData(prePowHash: any) {
+  const preHashU64s = [];
+
+  for (let i = 0; i < 4; i++) {
+    const result = toLittle(prePowHash.slice(i * 8, i * 8 + 8));
+    preHashU64s.push(BigInt(`0x${result.toString("hex")}`).toString());
+  }
+
+  return preHashU64s;
+}
+export async function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, templateHeader: IRawHeader, headerHash: string) {
   if (encoding === Encoding.BigHeader) {
     const buffer = Buffer.alloc(8)
     buffer.writeBigUInt64LE(timestamp) // hh
@@ -108,8 +182,8 @@ export function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, 
     return hash + buffer.toString('hex') 
   } 
   else if(encoding === Encoding.Custom) {
-    const serializedHeader = serializeBlockHeader(templateHeader);
-    const jobParams = generateJobHeader(serializedHeader);
+    const serializedHeader = await hasherSerializeHeader(templateHeader, true);
+    const jobParams = await hasherSerializeJobData(serializedHeader);
     return jobParams
     // const encoder = new TextEncoder();
     // const bytes = encoder.encode(headerHash);

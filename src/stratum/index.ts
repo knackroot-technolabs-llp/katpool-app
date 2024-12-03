@@ -5,7 +5,7 @@ import Server, { type Miner, type Worker } from './server';
 import { type Request, type Response, type Event, errors } from './server/protocol';
 import type Templates from './templates/index.ts';
 import { Address, type IRawHeader } from "../../wasm/kaspa";
-import { Encoding, encodeJob } from './templates/jobs/encoding.ts';
+import { Encoding, calculateTarget, encodeJob } from './templates/jobs/encoding.ts';
 import { SharesManager } from './sharesManager';
 import { minerjobSubmissions, jobsNotFound } from '../prometheus'
 import Monitoring from '../monitoring/index.ts';
@@ -32,7 +32,7 @@ export default class Stratum extends EventEmitter {
     this.server = new Server(port, initialDifficulty, this.onMessage.bind(this));
     this.difficulty = initialDifficulty;
     this.templates = templates;
-    this.templates.register((id, hash, timestamp, templateHeader, headerHash) => this.announceTemplate(id, hash, timestamp, templateHeader, headerHash));
+    this.templates.register((id, hash, timestamp, templateHeader, headerHash, bits) => this.announceTemplate(id, hash, timestamp, templateHeader, headerHash, bits));
     this.monitoring.log(`Stratum: Initialized with difficulty ${this.difficulty}`);
     this.extraNonce = "";
 
@@ -73,12 +73,12 @@ export default class Stratum extends EventEmitter {
     }    
   }
 
-  announceTemplate(id: string, hash: string, timestamp: bigint, templateHeader: IRawHeader, headerHash: string) {
+  announceTemplate(id: string, hash: string, timestamp: bigint, templateHeader: IRawHeader, headerHash: string, bits: number) {
     this.monitoring.log(`Stratum: Announcing new template ${id}`);
     const tasksData: { [key in Encoding]?: string } = {};
-    Object.values(Encoding).filter(value => typeof value !== 'number').forEach(value => {
+    Object.values(Encoding).filter(value => typeof value !== 'number').forEach(async(value) => {
       const encoding = Encoding[value as keyof typeof Encoding];
-      const encodedParams = encodeJob(hash, timestamp, encoding, templateHeader, headerHash)
+      const encodedParams = await encodeJob(hash, timestamp, encoding, templateHeader, headerHash)
       const task: Event<'mining.notify'> = {
         method: 'mining.notify',
         params: [id, encodedParams]
@@ -86,13 +86,19 @@ export default class Stratum extends EventEmitter {
       if(encoding === Encoding.Custom) {
         task.params.push(Number(timestamp));
       }
-      console.log("Task params job Id:", task.params[0])
+      // console.log("Task params job Id:", task.params[0])
       tasksData[encoding] = JSON.stringify(task);
     });
     this.subscriptors.forEach((socket) => {
       if (socket.readyState === "closed") {
         this.subscriptors.delete(socket);
       } else {
+        // const newDifficulty = Math.trunc(Number(2n ** 255n / calculateTarget(BigInt(bits))) / 2 ** 31)
+        const newDifficulty = bits
+        this.difficulty = newDifficulty
+        socket.data.difficulty = newDifficulty
+        this.reflectDifficulty(socket)
+
         socket.write(tasksData[socket.data.encoding] + '\n');
       }
     });
@@ -185,11 +191,15 @@ export default class Stratum extends EventEmitter {
             if (DEBUG) this.monitoring.debug(`Stratum: Mismatching worker details - Address: ${address}, Worker Name: ${name}`);
             throw Error('Mismatching worker details');
           }
-          const hash = this.templates.getHash(request.params[1]);
-          console.log("mining.submit ~ request.params :", request.params, hash)
+          // Fetch the job ID from the request parameters
+          const jobId = request.params[1];
+          let hash = this.templates.getHash(jobId);
           if (!hash) {
             if (DEBUG) this.monitoring.debug(`Stratum: Job not found - Address: ${address}, Worker Name: ${name}`);
             metrics.updateGaugeInc(jobsNotFound, [name, address]);
+            response.result = false;
+            response.error = errors["JOB_NOT_FOUND"]
+            return response
             // throw Error("Hash not found")
           }
           else {
@@ -198,20 +208,22 @@ export default class Stratum extends EventEmitter {
             const workerDiff = minerData?.workerStats.minDiff;
             const socketDiff = socket.data.difficulty;
             if (DEBUG) this.monitoring.debug(`Stratum: Current difficulties - Worker: ${workerDiff}, Socket: ${socketDiff}`);
-            const currentDifficulty = workerDiff || socketDiff;
+            const currentDifficulty = socketDiff;
             if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
             // Add extranonce to noncestr if enabled and submitted nonce is shorter than
             // expected (16 - <extranonce length> characters)
-            if (this.extraNonce !== "") {
-              const extranonce2Len = 16 - this.extraNonce.length;
+            // if (this.extraNonce !== "") {
+            //   const extranonce2Len = 16 - this.extraNonce.length;
 
-              if (request.params[2].length <= extranonce2Len) {
-                request.params[2] =
-                this.extraNonce + request.params[2].padStart(extranonce2Len, "0");
-              }
-            }
+            //   if (request.params[2].length <= extranonce2Len) {
+            //     request.params[2] =
+            //     this.extraNonce + request.params[2].padStart(extranonce2Len, "0");
+            //   }
+            // }
             try{
-              // console.log("this templates : ", this.templates);
+              // const fetchedTemplate = this.templates.templates.get(hash)
+              // const block = fetchedTemplate![0];
+              // const bits = block.header.bits;
               this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, BigInt(request.params[2]), this.templates)
             }
             catch(err: any) {

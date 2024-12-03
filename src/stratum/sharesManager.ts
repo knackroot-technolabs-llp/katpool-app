@@ -1,5 +1,5 @@
 import type { Socket } from 'bun';
-import { calculateTarget } from "../../wasm/kaspa";
+// import { calculateTarget } from "../../wasm/kaspa";
 import { Pushgateway } from 'prom-client';
 import type { RegistryContentType } from 'prom-client';
 import { stringifyHashrate, getAverageHashrateGHs } from './utils';
@@ -18,6 +18,7 @@ import {
 import { metrics } from '../../index';
 // Fix the import statement
 import Denque from 'denque';
+import { calculateTarget } from './templates/jobs/encoding';
 
 export interface WorkerStats {
   blocksFound: number;
@@ -102,14 +103,15 @@ export class SharesManager {
     // Critical Section: Check and Add Share
     if (this.contributions.has(nonce)) {
       metrics.updateGaugeInc(minerDuplicatedShares, [minerId, address]);
-      throw Error('Duplicate share');
+      // throw Error('Duplicate share');
+      return
     } else {
       this.contributions.set(nonce, { address, difficulty, timestamp: Date.now(), minerId });
     }
 
     const timestamp = Date.now();
     let minerData = this.miners.get(address);
-    const currentDifficulty = minerData ? minerData.workerStats.minDiff : difficulty;
+    const currentDifficulty = difficulty;
 
     metrics.updateGaugeInc(minerAddedShares, [minerId, address]);
 
@@ -168,11 +170,12 @@ export class SharesManager {
       if (report) minerData.workerStats.blocksFound++;
     }
 
-    const validity = target <= calculateTarget(currentDifficulty);
+    const validity = target <= calculateTarget(BigInt(currentDifficulty));
     if (!validity) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Invalid share for target: ${target} for miner ${minerId}`);
       metrics.updateGaugeInc(minerInvalidShares, [minerId, address]);
-      throw Error('Invalid share');
+      // throw Error('Invalid share');
+      return
     }
 
     if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);

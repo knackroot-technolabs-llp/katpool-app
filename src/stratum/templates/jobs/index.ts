@@ -14,6 +14,10 @@ export default class Jobs {
     return id
   }
 
+  setHash(id: string, hash: string) {
+    this.jobs.set(id, hash)
+  }
+
   expireNext() {
     this.jobs.delete(this.jobs.entries().next().value[0])
   }

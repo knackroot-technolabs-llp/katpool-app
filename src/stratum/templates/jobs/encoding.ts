@@ -100,6 +100,21 @@ function generateJobHeader(headerData: Uint8Array): number[] {
   return final;
 }
 
+export function calculateTarget (bits: bigint) {
+  const unshiftedExpt = bits >> 24n
+  let mant = bits & BigInt('0xFFFFFF')
+  let expt
+
+  if (unshiftedExpt <= 3n) {
+    mant = mant >> (8n * (3n - unshiftedExpt))
+    expt = 0n
+  } else {
+    expt = 8n * ((bits >> 24n) - 3n)
+  }
+
+  return mant << expt
+}
+
 export function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, templateHeader: IRawHeader, headerHash: string) {
   if (encoding === Encoding.BigHeader) {
     const buffer = Buffer.alloc(8)

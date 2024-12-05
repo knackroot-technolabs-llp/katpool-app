@@ -1,5 +1,5 @@
 import type { IBlock, RpcClient, IRawBlock, IRawHeader } from "../../../wasm/kaspa"
-import { Header, PoW } from "../../../wasm/kaspa"
+import { calculateTarget, Header, PoW } from "../../../wasm/kaspa"
 import Jobs from "./jobs"
 import { minedBlocksGauge, paidBlocksGauge } from '../../prometheus';
 import Monitoring from '../../monitoring'
@@ -9,7 +9,7 @@ import { metrics } from '../../../index';
 export default class Templates {
   private rpc: RpcClient
   private address: string
-  private templates: Map<string, [ IBlock, PoW ]> = new Map()
+  public templates: Map<string, [ IBlock, PoW ]> = new Map()
   private jobs: Jobs = new Jobs()
   private cacheSize: number
   private monitoring: Monitoring
@@ -54,7 +54,7 @@ export default class Templates {
     return report.report.type
   }
 
-  async register (callback: (id: string, hash: string, timestamp: bigint, templateHeader: IRawHeader, headerHash: string) => void) {
+  async register (callback: (id: string, hash: string, timestamp: bigint, templateHeader: IRawHeader) => void) {
     this.monitoring.log(`Templates: Registering new template callback`);
     this.rpc.addEventListener('new-block-template', async () => {
       const template = (await this.rpc.getBlockTemplate({
@@ -79,7 +79,7 @@ export default class Templates {
         this.jobs.expireNext()
       }
 
-      callback(id, proofOfWork.prePoWHash, header.timestamp, template.header, headerHash)
+    callback(id, proofOfWork.prePoWHash, header.timestamp, template.header)
     })
 
     await this.rpc.subscribeNewBlockTemplate()

@@ -12,6 +12,13 @@ import fs from 'fs';
 import path from 'path';
 import { ExitStatus, getParsedCommandLineOfConfigFile } from "typescript";
 
+function shutdown() {
+  console.log("Shutdown invoked")
+  process.exit();
+}
+
+process.on('SIGINT', shutdown);
+
 export let DEBUG = 0
 if (process.env.DEBUG == "1") {
   DEBUG = 1;

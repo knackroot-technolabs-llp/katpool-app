@@ -3,7 +3,7 @@ import type { IRawHeader } from '../../../../wasm/kaspa/kaspa';
 
 export enum Encoding {
   BigHeader,
-  Custom
+  Bitmain
 }
 
 function write16(hasher: Blake2b, value: number) {
@@ -23,7 +23,7 @@ function writeHexString(hasher: Blake2b, hexString: string) {
   hasher.update(Uint8Array.from(buf));
 }
 
-function serializeBlockHeader(header:any) {
+export function serializeBlockHeader(header:any) {
   const key = Uint8Array.from(Buffer.from('BlockHash'))
   const hasher = blake2b(32, key, undefined, undefined, true); 
 
@@ -77,7 +77,7 @@ function serializeBlockHeader(header:any) {
   return final;
 }
 
-function generateJobHeader(headerData: Uint8Array): number[] {
+export function generateJobHeader(headerData: Uint8Array): number[] {
   const ids: BigInt[] = [];
   // Loop to read 8 bytes at a time
   for (let i = 0; i < headerData.length; i += 8) {
@@ -100,26 +100,15 @@ function generateJobHeader(headerData: Uint8Array): number[] {
   return final;
 }
 
-export function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, templateHeader: IRawHeader, headerHash: string) {
+export function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, templateHeader: IRawHeader) {
   if (encoding === Encoding.BigHeader) {
     const buffer = Buffer.alloc(8)
     buffer.writeBigUInt64LE(timestamp) // hh
   
     return hash + buffer.toString('hex') 
-  } 
-  else if(encoding === Encoding.Custom) {
+  } else if(encoding === Encoding.Bitmain) {
     const serializedHeader = serializeBlockHeader(templateHeader);
     const jobParams = generateJobHeader(serializedHeader);
     return jobParams
-    // const encoder = new TextEncoder();
-    // const bytes = encoder.encode(headerHash);
-    // const bigUint64Array = new BigUint64Array(4);
-    // const res = [];
-    // for (let i = 0; i < bigUint64Array.length; i++) {
-    //   const offset = i * 8;
-    //   bigUint64Array[i] = new DataView(bytes.buffer).getBigUint64(offset, true); // true for little-endian
-    //   res.push(Number(BigInt(bigUint64Array[i].toString(16))));
-    // }
-    // return res
   } else throw Error('Unknown encoding')
 }

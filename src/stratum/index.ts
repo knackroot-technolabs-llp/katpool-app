@@ -14,6 +14,8 @@ import { Mutex } from 'async-mutex';
 import { metrics } from '../../index';
 import Denque from 'denque';
 
+const bitMainRegex = new RegExp(".*(GodMiner).*", "i")
+let isBitmain = false;
 
 export default class Stratum extends EventEmitter {
   server: Server;
@@ -117,9 +119,13 @@ export default class Stratum extends EventEmitter {
         case 'mining.subscribe': {
           if (this.subscriptors.has(socket)) throw Error('Already subscribed');
           const minerType = request.params[0].toLowerCase();
-          socket.data.encoding = Encoding.Bitmain;
-          this.subscriptors.add(socket);
-          response.result = [true, this.extraNonce, 8 - Math.floor(this.extraNonce.length / 2)];
+          response.result = [true, "EthereumStratum/1.0.0"]
+          if (bitMainRegex.test(minerType)) {
+            isBitmain = true;
+            socket.data.encoding = Encoding.Bitmain;
+            response.result = [true, this.extraNonce, 8 - Math.floor(this.extraNonce.length / 2)];
+          }            
+          this.subscriptors.add(socket);        
           this.emit('subscription', socket.remoteAddress, request.params[0]);
           this.monitoring.log(`Stratum: Miner subscribed from ${socket.remoteAddress}`);
           break;
@@ -158,11 +164,13 @@ export default class Stratum extends EventEmitter {
             existingMinerData!.sockets = sockets;
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
           }
-          const result: any[] = [
-            this.extraNonce, 
-            8 - Math.floor(this.extraNonce.length / 2)
-          ];
-          
+          var result : any[] = [randomBytes(4).toString('hex')];
+          if (isBitmain) {
+            result = [
+              this.extraNonce, 
+              8 - Math.floor(this.extraNonce.length / 2)
+            ];
+          }                  
           const event: Event<'mining.set_extranonce'> = {
             method: 'mining.set_extranonce',
             params: [result]
@@ -204,7 +212,7 @@ export default class Stratum extends EventEmitter {
             if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
             // Add extranonce to noncestr if enabled and submitted nonce is shorter than
             // expected (16 - <extranonce length> characters)
-            if (this.extraNonce !== "") {
+            if (isBitmain && this.extraNonce !== "") {
               const extranonce2Len = 16 - this.extraNonce.length;
 
               if (request.params[2].length <= extranonce2Len) {
@@ -214,28 +222,31 @@ export default class Stratum extends EventEmitter {
             }
             try{
               // console.log("this templates : ", this.templates);
-              this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, BigInt(request.params[2]), this.templates)
+              let nonce = BigInt('0x' + request.params[2]);
+              if (isBitmain)
+                nonce = BigInt(request.params[2]);
+              this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, nonce, this.templates)
             }
             catch(err: any) {
               console.log("error thrown : ", err);
-              // if (!(err instanceof Error)) throw err;
-              // switch (err.message) {
-              //   case 'Duplicate share':
-              //     console.log("DUPLICATE_SHARE")
-              //     response.error = errors['DUPLICATE_SHARE'];
-              //     break;
-              //   case 'Stale header':
-              //     console.log("Stale Header : JOB_NOT_FOUND")
-              //     response.error = errors['JOB_NOT_FOUND'];
-              //     break;
-              //   case 'Invalid share':
-              //     console.log("LOW_DIFFICULTY_SHARE")
-              //     response.error = errors['LOW_DIFFICULTY_SHARE'];
-              //     break;
-              //   default:
-              //     throw err;
-              // }
-              // response.result = false;
+              if (!(err instanceof Error)) throw err;
+              switch (err.message) {
+                case 'Duplicate share':
+                  console.log("DUPLICATE_SHARE")
+                  response.error = errors['DUPLICATE_SHARE'];
+                  break;
+                case 'Stale header':
+                  console.log("Stale Header : JOB_NOT_FOUND")
+                  response.error = errors['JOB_NOT_FOUND'];
+                  break;
+                case 'Invalid share':
+                  console.log("LOW_DIFFICULTY_SHARE")
+                  response.error = errors['LOW_DIFFICULTY_SHARE'];
+                  break;
+                default:
+                  throw err;
+              }
+              response.result = false;
             }
           }
           break;

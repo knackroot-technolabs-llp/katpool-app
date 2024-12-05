@@ -15,7 +15,7 @@ export type Request<M extends keyof ResponseMappings = keyof ResponseMappings> =
 }[ M ]
 
 export interface ResponseMappings {
-  "mining.subscribe": [ boolean, string, number ] // EthereumStratum/1.0.0
+  "mining.subscribe": [ boolean, string, number? ] // !bitmain - EthereumStratum/1.0.0
   'mining.authorize': boolean // TRUE
   'mining.submit': boolean // TRUE
 }

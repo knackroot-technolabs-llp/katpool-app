@@ -221,10 +221,12 @@ export default class Stratum extends EventEmitter {
               }
             }
             try{
-              // console.log("this templates : ", this.templates);
-              let nonce = BigInt('0x' + request.params[2]);
-              if (isBitmain)
+              let nonce : bigint;
+              if (isBitmain) {
                 nonce = BigInt(request.params[2]);
+              } else {
+                nonce = BigInt('0x' + request.params[2]);                
+              }
               this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, nonce, this.templates)
             }
             catch(err: any) {

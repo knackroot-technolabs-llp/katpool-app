@@ -2,7 +2,7 @@ import blake2b, { type Blake2b } from 'blake2b';
 import type { IRawHeader } from '../../../../wasm/kaspa/kaspa';
 
 export enum Encoding {
-  BigHeader,
+  // BigHeader,
   Bitmain
 }
 
@@ -77,7 +77,7 @@ export function serializeBlockHeader(header:any) {
   return final;
 }
 
-export function generateJobHeader(headerData: Uint8Array): number[] {
+export function generateJobHeader(headerData: Uint8Array): bigint[] {
   const ids: BigInt[] = [];
   // Loop to read 8 bytes at a time
   for (let i = 0; i < headerData.length; i += 8) {
@@ -89,24 +89,25 @@ export function generateJobHeader(headerData: Uint8Array): number[] {
       // Push the value to ids as BigInt
       ids.push(value);
   }
-  const final: number[] = [];
+  const final: bigint[] = [];
   // Process each value in ids (convert to hex and back to BigInt)
   for (const v of ids) {
       const asHex = v.toString(16);
       // Convert hex string back to BigInt
       const bb = BigInt('0x' + asHex);  // Prefix '0x' for valid hex format
-      final.push(Number(bb));
+      final.push(bb);
   }
   return final;
 }
 
 export function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, templateHeader: IRawHeader) {
-  if (encoding === Encoding.BigHeader) {
-    const buffer = Buffer.alloc(8)
-    buffer.writeBigUInt64LE(timestamp) // hh
+  // if (encoding === Encoding.BigHeader) {
+  //   const buffer = Buffer.alloc(8)
+  //   buffer.writeBigUInt64LE(timestamp) // hh
   
-    return hash + buffer.toString('hex') 
-  } else if(encoding === Encoding.Bitmain) {
+  //   return hash + buffer.toString('hex') 
+  // } else 
+  if(encoding === Encoding.Bitmain) {
     const serializedHeader = serializeBlockHeader(templateHeader);
     const jobParams = generateJobHeader(serializedHeader);
     return jobParams

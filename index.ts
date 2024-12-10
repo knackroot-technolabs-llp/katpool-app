@@ -13,7 +13,7 @@ import path from 'path';
 import { ExitStatus, getParsedCommandLineOfConfigFile } from "typescript";
 
 function shutdown() {
-  console.log("Shutdown invoked")
+  console.log("\n\nShutdown invoked")
   process.exit();
 }
 

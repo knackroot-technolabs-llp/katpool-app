@@ -2,7 +2,7 @@ import type { Socket } from 'bun';
 import { calculateTarget } from "../../wasm/kaspa";
 import { Pushgateway } from 'prom-client';
 import type { RegistryContentType } from 'prom-client';
-import { stringifyHashrate, getAverageHashrateGHs } from './utils';
+import { stringifyHashrate, getAverageHashrateGHs, BigDiffToTarget } from './utils';
 import Monitoring from '../monitoring';
 import { DEBUG } from '../../index';
 import {
@@ -154,6 +154,8 @@ export class SharesManager {
     }
 
     const state = templates.getPoW(hash);
+    const blockHeader = templates.templates.get(hash)[0].header
+    // console.log(`State Target :  ${state.target} for hash: ${hash}`);
     if (!state) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Stale header for miner ${minerId} and hash: ${hash}`);
       metrics.updateGaugeInc(minerStaleShares, [minerId, address]);
@@ -161,22 +163,26 @@ export class SharesManager {
     }
 
     const [isBlock, target] = state.checkWork(nonce);
+    // console.log(`CheckWork target : ${target} for hash: ${hash}`)
     if (isBlock) {
-      if (DEBUG) this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
+      this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
       metrics.updateGaugeInc(minerIsBlockShare, [minerId, address]);
       const report = await templates.submit(minerId, hash, nonce);
       if (report) minerData.workerStats.blocksFound++;
     }
 
-    const validity = target <= calculateTarget(currentDifficulty);
+    // const validity = target <= calculateTarget(currentDifficulty);ibute
+    const validity = target <= BigDiffToTarget(BigInt(currentDifficulty));
+    // console.log(`BigDiffToTarget(BigInt(currentDifficulty)) : ${BigDiffToTarget(BigInt(currentDifficulty))} for hash: ${hash}`);
+    // console.log(`calculate Target : ${calculateTarget(currentDifficulty)} for hash: ${hash}`);
     if (!validity) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Invalid share for target: ${target} for miner ${minerId}`);
       metrics.updateGaugeInc(minerInvalidShares, [minerId, address]);
-      throw Error('Invalid share');
-      // return
+      // throw Error('Invalid share');
+      return
     }
 
-    if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);
+    this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);
 
     const share = { minerId, address, difficulty, timestamp: Date.now() };
     this.shareWindow.push(share);

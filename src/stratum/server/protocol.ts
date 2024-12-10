@@ -44,10 +44,12 @@ export const errors: { [key: string]: Error } = {
 export interface EventMappings {
   'mining.set_extranonce': any[] // 2 bytes
   'mining.set_difficulty': [ number ] // difficulty
-  'mining.notify': [ string, string | number[], number? ] // jobid, bigpow && possibly timestamp on 4 u64 protocol
+  'mining.notify': [ string, string | bigint[], bigint? ] // jobid, bigpow && possibly timestamp on 4 u64 protocol
 }
 
 export interface Event<M extends keyof EventMappings = keyof EventMappings> {
+  id?: number
+  jsonrpc?: string
   method: M
   params: EventMappings[M]
 }

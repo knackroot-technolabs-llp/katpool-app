@@ -34,3 +34,11 @@ export function getAverageHashrateGHs(stats: WorkerStats): number {
 
   return (avgDifficulty * relevantShares.length) / timeDifference;
 }
+
+const maxTarget = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"); // Example maxTarget, adjust based on context
+
+export function BigDiffToTarget(diff: bigint): bigint {
+  // maxTarget / diff
+  const target = maxTarget / diff;
+  return target;
+}

@@ -42,7 +42,8 @@ export default class Stratum extends EventEmitter {
     // Start the VarDiff thread
     const varDiffStats = true; // Enable logging of VarDiff stats
     const clampPow2 = true; // Enable clamping difficulty to powers of 2
-    this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
+    // this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
+    this.sharesManager.startVardiffThreadGo(sharesPerMin, varDiffStats, clampPow2);
 
     if (!process.env.EXTRANONCE_SIZE) {
       console.error("Extranonce size is not set in env.")

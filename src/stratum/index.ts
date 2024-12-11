@@ -170,21 +170,29 @@ export default class Stratum extends EventEmitter {
             const existingMinerData = this.sharesManager.getMiners().get(worker.address);
             existingMinerData!.sockets = sockets;
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
-          }
-          var result : any[] = [randomBytes(4).toString('hex')];
+          }  
+
+          // TODO: Test.
+          // Set extranonce
           if (isBitmain) {
-            result = [
-              this.extraNonce, 
-              8 - Math.floor(this.extraNonce.length / 2)
-            ];
-          }                  
-          const event: Event<'mining.set_extranonce'> = {
-            method: 'mining.set_extranonce',
-            params: [result]
-          };
-          if (this.extraNonce != "") {
+            const event : Event<'mining.set_extranonce'> = {
+              method: 'mining.set_extranonce',
+              params: [
+                this.extraNonce, 
+                8 - Math.floor(this.extraNonce.length / 2)
+              ]
+            };
+            if (this.extraNonce != "") {
+              socket.write(JSON.stringify(event) + '\n');
+            }          
+          } else {
+            const event : Event<'set_extranonce'> = {
+              method: 'set_extranonce',
+              params: [randomBytes(4).toString('hex')]
+            }
             socket.write(JSON.stringify(event) + '\n');
           }          
+
           this.reflectDifficulty(socket);
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
           break;

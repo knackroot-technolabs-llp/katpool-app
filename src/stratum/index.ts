@@ -111,6 +111,7 @@ export default class Stratum extends EventEmitter {
       method: 'mining.set_difficulty',
       params: [socket.data.difficulty]
     };
+    // console.log("send mining.set_difficulty : ", JSON.stringify(event));
     socket.write(JSON.stringify(event) + '\n');
   }
 
@@ -130,7 +131,7 @@ export default class Stratum extends EventEmitter {
           if (bitMainRegex.test(minerType)) {
             isBitmain = true;
             socket.data.encoding = Encoding.Bitmain;
-            response.result = [true, this.extraNonce, 8 - Math.floor(this.extraNonce.length / 2)];
+            response.result = [null, this.extraNonce, 8 - Math.floor(this.extraNonce.length / 2)];
           }            
           this.subscriptors.add(socket);        
           this.emit('subscription', socket.remoteAddress, request.params[0]);
@@ -171,8 +172,7 @@ export default class Stratum extends EventEmitter {
             existingMinerData!.sockets = sockets;
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
           }  
-
-          // TODO: Test.
+          // TODO: KN: Test.
           // Set extranonce
           if (isBitmain) {
             const event : Event<'mining.set_extranonce'> = {
@@ -191,8 +191,8 @@ export default class Stratum extends EventEmitter {
               params: [randomBytes(4).toString('hex')]
             }
             socket.write(JSON.stringify(event) + '\n');
-          }          
-
+          }              
+          // console.log("authorize : socket data difficuty :", socket.data.difficulty);
           this.reflectDifficulty(socket);
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
           break;
@@ -209,7 +209,7 @@ export default class Stratum extends EventEmitter {
           }
           const hash = this.templates.getHash(request.params[1]);
           // const hash = "0caf362f5317b4e5471663815773739fc9b0b4067ad40b72612db85cd9add382"
-          // console.log("mining.submit ~ request.params :", request.params[1], hash)
+          console.log("mining.submit ~ request.params :", request.params[1], hash)
           if (!hash) {
             if (DEBUG) this.monitoring.debug(`Stratum: Job not found - Address: ${address}, Worker Name: ${name}`);
             metrics.updateGaugeInc(jobsNotFound, [name, address]);

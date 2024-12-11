@@ -45,7 +45,7 @@ export default class Server {
     socket.data = {
       difficulty: this.difficulty,
       workers: new Map(),
-      encoding: Encoding.BigHeader,
+      encoding: Encoding.Bitmain,
       cachedBytes: "",
     }
   }

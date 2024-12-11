@@ -1,4 +1,4 @@
-import type { IBlock, RpcClient, IRawBlock, IRawHeader } from "../../../wasm/kaspa"
+import type { IBlock, RpcClient, IRawBlock, IRawHeader, HexString } from "../../../wasm/kaspa"
 import { calculateTarget, Header, PoW } from "../../../wasm/kaspa"
 import Jobs from "./jobs"
 import { minedBlocksGauge, paidBlocksGauge } from '../../prometheus';
@@ -6,6 +6,8 @@ import Monitoring from '../../monitoring'
 import { DEBUG } from '../../../index'
 import { metrics } from '../../../index';   
 import { BigDiffToTarget } from "../utils";
+import JsonBig from 'json-bigint';
+import redis, { type RedisClientType } from 'redis';
 
 export default class Templates {
   private rpc: RpcClient
@@ -15,6 +17,7 @@ export default class Templates {
   private cacheSize: number
   private monitoring: Monitoring
   private idCounter: number
+  private subscriber: RedisClientType
 
   constructor (rpc: RpcClient, address: string, cacheSize: number) {
     this.monitoring = new Monitoring()
@@ -22,6 +25,10 @@ export default class Templates {
     this.address = address
     this.cacheSize = cacheSize
     this.idCounter = 0
+    this.subscriber = redis.createClient({
+      url: "redis://127.0.0.1:6379",
+    })
+    this.subscriber.connect()
   }
 
   getHash (id: string) {
@@ -59,12 +66,76 @@ export default class Templates {
 
   async register (callback: (id: string, hash: string, timestamp: bigint, templateHeader: IRawHeader) => void) {
     this.monitoring.log(`Templates: Registering new template callback`);
-    this.rpc.addEventListener('new-block-template', async () => {
-      const template = (await this.rpc.getBlockTemplate({
-        payAddress: this.address,
-        extraData: "Katpool"
-      })).block as IRawBlock;
+    // this.rpc.addEventListener('new-block-template', async () => {
+      // const template = (await this.rpc.getBlockTemplate({
+      //   payAddress: this.address,
+      //   extraData: "Katpool"
+      // })).block as IRawBlock;
 
+
+      this.subscriber.subscribe('templateChannel', (message) => {
+      const fetchedTemplate = JSON.parse(message)
+      const blockTemplate = {
+        header: fetchedTemplate.Block.Header,
+      }
+      function convertJson(data: any) {
+        // Recursively traverse and transform keys
+        function transformKeys(obj: any): any {
+            if (Array.isArray(obj)) {
+                return obj.map((item: any) => transformKeys(item)); // Process arrays
+            } else if (obj !== null && typeof obj === 'object') {
+                let newObj: any = {};
+                for (const key in obj) {
+                    if (obj.hasOwnProperty(key)) {
+                        const newKey = key.toLowerCase(); // Convert key to lowercase
+                        newObj[newKey] = transformKeys(obj[key]); // Recursively call for nested objects
+                    }
+                }
+                return newObj;
+            }
+            return obj; // Return the value if it's neither an array nor an object
+        }
+    
+        // First, transform all keys to lowercase
+        const transformedKeysData = transformKeys(data);
+        const parents = transformedKeysData.header.parents
+        delete transformedKeysData.header.parents
+
+        let parentsByLevel: any[] = [];
+        parents.map((item: any, i: number) => {
+          parentsByLevel[i] = item.parenthashes
+        })
+
+        transformedKeysData.header["parentsByLevel"] = parentsByLevel
+    
+        return transformedKeysData;
+      }
+      const converted = convertJson(blockTemplate)
+      const tHeader: IRawHeader = {
+        version: converted.header.version,
+        parentsByLevel: converted.header.parentsByLevel,
+        hashMerkleRoot: converted.header.hashmerkleroot,
+        acceptedIdMerkleRoot: converted.header.acceptedidmerkleroot,
+        utxoCommitment: converted.header.utxocommitment,
+        timestamp: BigInt(converted.header.timestamp),
+        bits: converted.header.bits,
+        nonce: BigInt(converted.header.nonce),
+        daaScore: BigInt(converted.header.daascore),
+        blueWork: converted.header.bluework,
+        blueScore: BigInt(converted.header.bluescore),
+        pruningPoint: converted.header.pruningpoint,
+      }
+      const template = {
+        header: tHeader,
+      }
+      if ((template.header.blueWork as string).length % 2 !== 0) {
+        template.header.blueWork = '0' + template.header.blueWork;
+      }
+
+      // console.log("🚀 ~ file: index.ts:121 ~ Templates ~ this.subscriber.subscribe ~ converted:", tHeader)
+
+      // const fethcedTemplate = { ...template.header, "parentsByLevel": undefined}
+      // console.log(`fetched template : ${JsonBig.stringify(fethcedTemplate)} and template transactions : ${JsonBig.stringify(template.transactions)}`)
       // const template = {
       //   header: {
       //     version: 1,
@@ -136,7 +207,7 @@ export default class Templates {
       //     pruningPoint: "fc239a9d84a1e20bbe8232e9133c57229634f2c2ad11800bf4ef4e7f8f6b6a4b",
       //   },
       // }
-      const header = new Header(template.header);
+      const header = new Header(template.header as IRawHeader);
       const headerHash = header.finalize();
 
       // if (this.templates.has(headerHash)) return
@@ -161,8 +232,10 @@ export default class Templates {
         this.jobs.expireNext()
       }
 
-    callback((this.idCounter).toString(), proofOfWork.prePoWHash, header.timestamp, template.header)
+    callback((this.idCounter).toString(), headerHash, header.timestamp, template.header)
     })
+    // })
+
 
     await this.rpc.subscribeNewBlockTemplate()
   }

@@ -171,7 +171,7 @@ export class SharesManager {
       if (report) minerData.workerStats.blocksFound++;
     }
 
-    // const validity = target <= calculateTarget(currentDifficulty);ibute
+    // const validity = target <= calculateTarget(currentDifficulty);
     const validity = target <= BigDiffToTarget(BigInt(currentDifficulty));
     // console.log(`BigDiffToTarget(BigInt(currentDifficulty)) : ${BigDiffToTarget(BigInt(currentDifficulty))} for hash: ${hash}`);
     // console.log(`calculate Target : ${calculateTarget(currentDifficulty)} for hash: ${hash}`);

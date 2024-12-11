@@ -514,7 +514,7 @@ export class SharesManager {
       }
   
       // sh.statsLock.Unlock()
-    }, varDiffThreadSleep);
+    }, varDiffThreadSleep * 1000);
   }
 
   // (re)start vardiff tracker

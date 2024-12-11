@@ -425,9 +425,11 @@ export class SharesManager {
     return shares;
   }
 
-  startVardiffThreadGo(expectedShareRate: number, logStats: boolean, clamp: boolean) { // : error
-    // TODO // expectedShareRate: uint
+  async sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 
+  startVardiffThreadGo(expectedShareRate: number, logStats: boolean, clamp: boolean): void {
     // 20 shares/min allows a ~99% confidence assumption of:
     //   < 100% variation after 1m
     //   < 50% variation after 3m
@@ -437,11 +439,9 @@ export class SharesManager {
     //   < 5% variation after 4h
     var windows: number[] = [1, 3, 10, 30, 60, 240, 0]
     var tolerances: number[] = [1, 0.5, 0.25, 0.15, 0.1, 0.05, 0.05]
-
-    // TODO // var bws = &utils.BufferedWriteSyncer{WS: os.Stdout, FlushInterval: varDiffThreadSleep * time.Second}
   
-    while (true) {
-      // TODO // time.Sleep(varDiffThreadSleep * time.Second)
+    setInterval(async () => {
+      await this.sleep(varDiffThreadSleep * 1000);
   
       // don't like locking entire stats struct - risk should be negligible
       // if mutex is ultimately needed, should move to one per client
@@ -454,22 +454,22 @@ export class SharesManager {
       var statsLines: string[] = []
       var toleranceErrs: string[] = []
   
-      var workStats: WorkerStats
-      for (let [_, v] of workStats) {
-        var worker: string = v.WorkerName
-        if (v.VarDiffStartTime == 0) {
+      for (const [address, minerData] of this.miners) {
+        const workerStats = minerData.workerStats;
+        var worker: string = workerStats.workerName
+        if (workerStats.varDiffStartTime == 0) {
           // no vardiff sent to client
           toleranceErrs = toleranceErrs.concat(toleranceErrs, `no diff sent to client ${worker}`)
           continue
         }
   
-        var diff : number = v.minDiff
-        var shares: number = v.VarDiffSharesFound
-        var duration: number = (Date.now() - v.VarDiffStartTime.getTime()) / 60000
+        var diff : number = workerStats.minDiff
+        var shares: number = workerStats.varDiffSharesFound
+        var duration: number = (Date.now() - workerStats.varDiffStartTime) / 60000
         var shareRate: number = shares / duration
         var shareRateRatio: number = shareRate / expectedShareRate
-        var window: number = windows[v.VarDiffWindow]
-        var tolerance: number = tolerances[v.VarDiffWindow]
+        var window: number = windows[workerStats.varDiffWindow]
+        var tolerance: number = tolerances[workerStats.varDiffWindow]
   
         statsLines = statsLines.concat(statsLines, ` ${worker.padEnd(14)}| ${diff.toFixed(2).padStart(11)} | ${window.toString().padStart(8)} | ${duration.toFixed(2).padStart(10)} | ${shares.toString().padStart(11)} | ${shareRate.toFixed(2).padStart(9)}`)
   
@@ -478,23 +478,25 @@ export class SharesManager {
           if (Math.abs(1-shareRateRatio) >= tolerance) {
             // final stage submission rate OOB
             toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance*100}%%)`)
-            this.updateVarDiff(v, diff*shareRateRatio, clamp)
+            this.updateVarDiff(workerStats, diff*shareRateRatio, clamp)
+            this.updateSocketDifficulty(address, diff*shareRateRatio)
           }
           continue
         }
   
         // check all previously cleared windows
         var i: number = 1
-        for (; i < v.VarDiffWindow; ) {
+        for (; i < workerStats.varDiffWindow; ) {
           if (Math.abs(1-shareRateRatio) >= tolerances[i]) {
             // breached tolerance of previously cleared window
             toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i]*100}%%) for ${windows[i]}m window`)
-            this.updateVarDiff(v, diff*shareRateRatio, clamp)
+            this.updateVarDiff(workerStats, diff*shareRateRatio, clamp)
+            this.updateSocketDifficulty(address, diff*shareRateRatio)
             break
           }
           i++
         }
-        if (i < v.VarDiffWindow) {
+        if (i < workerStats.varDiffWindow) {
           // should only happen if we broke previous loop
           continue
         }
@@ -503,7 +505,8 @@ export class SharesManager {
         if (shares >= window*expectedShareRate*(1+tolerance)) {
           // submission rate > window max
           toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[i]*100}%%) for ${windows[i]}m window`)
-          this.updateVarDiff(v, diff*shareRateRatio, clamp)
+          this.updateVarDiff(workerStats, diff*shareRateRatio, clamp)
+          this.updateSocketDifficulty(address, diff*shareRateRatio)
           continue
         }
   
@@ -513,24 +516,25 @@ export class SharesManager {
           if (shares <= window * expectedShareRate * (1-tolerance)) {
             // submission rate < window min
             toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[i]*100}%%) for ${windows[i]}m window`)
-            this.updateVarDiff(v, diff * Math.max(shareRateRatio, 0.1), clamp)
+            this.updateVarDiff(workerStats, diff * Math.max(shareRateRatio, 0.1), clamp)
+            this.updateSocketDifficulty(address, diff * Math.max(shareRateRatio, 0.1))
             continue
           }
   
-          v.VarDiffWindow++
+          workerStats.varDiffWindow++
         }
       }
 
       statsLines.sort()
       stats += statsLines + "\n"
-      stats += `\n\n========================================================== ks_bridge_${version} ===\n`
+      stats += `\n\n========================================================== katpool_app ===\n`
       stats += `\n${toleranceErrs}\n\n\n`
       if (logStats) {
-        bws.Write([]byte(stats))
+        this.monitoring.log(stats)
       }
   
       // sh.statsLock.Unlock()
-    }
+    }, varDiffThreadSleep);
   }
 
   // (re)start vardiff tracker
@@ -561,24 +565,34 @@ export class SharesManager {
     return previousMinDiff
   }
 
-  setClientVardiff(minDiff: number): number {
-    // TODO // var stats = getCreateStats()
-    
+  setClientVardiff(minDiff: number): number[] {    
     // only called for initial diff setting, and clamping is handled during
     // config load
-    var previousMinDiff = this.updateVarDiff(stats, minDiff, false)
-    this.startVarDiff(stats)
-    return previousMinDiff
+    var previousMinDiffArr: number[] = []
+    for (const [address, minerData] of this.miners) {
+      const stats = minerData.workerStats;
+      var previousMinDiff = this.updateVarDiff(stats, minDiff, false)
+      this.updateSocketDifficulty(address, minDiff)
+      this.startVarDiff(stats)
+      previousMinDiffArr.push(previousMinDiff)
+    }
+    return previousMinDiffArr
   }
 
   startClientVardiff() {
-  	// TODO // stats = getCreateStats()
-  	this.startVarDiff(stats)
+  	for (const [address, minerData] of this.miners) {
+      const stats = minerData.workerStats;
+  	  this.startVarDiff(stats)
+    }
   }
   
-  getClientVardiff() : number {
-  	// TODO // stats = getCreateStats()
-  	return stats.minDiff
+  getClientVardiff() : number[] {
+  	var minDiffArr: number[] = []
+    for (const [address, minerData] of this.miners) {
+      const stats = minerData.workerStats;
+      minDiffArr.push(stats.minDiff)
+    }
+  	return minDiffArr
   }
 }
 

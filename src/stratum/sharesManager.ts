@@ -109,7 +109,7 @@ export class SharesManager {
 
     const timestamp = Date.now();
     let minerData = this.miners.get(address);
-    const currentDifficulty = difficulty;
+    const currentDifficulty = minerData ? minerData.workerStats.minDiff : difficulty;
 
     metrics.updateGaugeInc(minerAddedShares, [minerId, address]);
 
@@ -162,7 +162,7 @@ export class SharesManager {
 
     const [isBlock, target] = state.checkWork(nonce);
     if (isBlock) {
-      this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
+      if (DEBUG) this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
       metrics.updateGaugeInc(minerIsBlockShare, [minerId, address]);
       const report = await templates.submit(minerId, hash, nonce);
       if (report) minerData.workerStats.blocksFound++;
@@ -176,7 +176,7 @@ export class SharesManager {
       return
     }
 
-    this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);
+    if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);
 
     const share = { minerId, address, difficulty, timestamp: Date.now() };
     this.shareWindow.push(share);

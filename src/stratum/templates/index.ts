@@ -1,5 +1,5 @@
-import type { IBlock, RpcClient, IRawBlock, IRawHeader, HexString } from "../../../wasm/kaspa"
-import { calculateTarget, Header, PoW } from "../../../wasm/kaspa"
+import type { IBlock, RpcClient, IRawBlock, IRawHeader } from "../../../wasm/kaspa"
+import { Header, PoW } from "../../../wasm/kaspa"
 import Jobs from "./jobs"
 import { minedBlocksGauge, paidBlocksGauge } from '../../prometheus';
 import Monitoring from '../../monitoring'

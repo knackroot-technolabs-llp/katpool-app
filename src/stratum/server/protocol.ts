@@ -49,8 +49,6 @@ export interface EventMappings {
 }
 
 export interface Event<M extends keyof EventMappings = keyof EventMappings> {
-  id?: number
-  jsonrpc?: string
   method: M
   params: EventMappings[M]
 }

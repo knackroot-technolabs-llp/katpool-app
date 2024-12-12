@@ -1,6 +1,7 @@
 import type { Socket } from 'bun';
 import { calculateTarget } from "../../wasm/kaspa";
 import { Pushgateway } from 'prom-client';
+import Server, { type Worker } from './server';
 import type { RegistryContentType } from 'prom-client';
 import { stringifyHashrate, getAverageHashrateGHs } from './utils';
 import Monitoring from '../monitoring';
@@ -43,6 +44,7 @@ type MinerData = {
 };
 
 const varDiffThreadSleep: number = 10
+const zeroDateMillS: number = new Date(0).getMilliseconds()
 
 type Contribution = {
   address: string;
@@ -457,7 +459,7 @@ export class SharesManager {
       for (const [address, minerData] of this.miners) {
         const workerStats = minerData.workerStats;
         var worker: string = workerStats.workerName
-        if (workerStats.varDiffStartTime == 0) {
+        if (workerStats.varDiffStartTime == zeroDateMillS) {
           // no vardiff sent to client
           toleranceErrs = toleranceErrs.concat(toleranceErrs, `no diff sent to client ${worker}`)
           continue
@@ -479,7 +481,6 @@ export class SharesManager {
             // final stage submission rate OOB
             toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance*100}%%)`)
             this.updateVarDiff(workerStats, diff*shareRateRatio, clamp)
-            this.updateSocketDifficulty(address, diff*shareRateRatio)
           }
           continue
         }
@@ -491,7 +492,6 @@ export class SharesManager {
             // breached tolerance of previously cleared window
             toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i]*100}%%) for ${windows[i]}m window`)
             this.updateVarDiff(workerStats, diff*shareRateRatio, clamp)
-            this.updateSocketDifficulty(address, diff*shareRateRatio)
             break
           }
           i++
@@ -506,7 +506,6 @@ export class SharesManager {
           // submission rate > window max
           toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[i]*100}%%) for ${windows[i]}m window`)
           this.updateVarDiff(workerStats, diff*shareRateRatio, clamp)
-          this.updateSocketDifficulty(address, diff*shareRateRatio)
           continue
         }
   
@@ -517,7 +516,6 @@ export class SharesManager {
             // submission rate < window min
             toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[i]*100}%%) for ${windows[i]}m window`)
             this.updateVarDiff(workerStats, diff * Math.max(shareRateRatio, 0.1), clamp)
-            this.updateSocketDifficulty(address, diff * Math.max(shareRateRatio, 0.1))
             continue
           }
   
@@ -539,7 +537,7 @@ export class SharesManager {
 
   // (re)start vardiff tracker
   startVarDiff(stats: WorkerStats) {
-  	if (stats.varDiffStartTime == 0) {
+  	if (stats.varDiffStartTime  == zeroDateMillS) {
   		stats.varDiffSharesFound = 0
   		stats.varDiffStartTime = Date.now()
   	}
@@ -552,47 +550,34 @@ export class SharesManager {
       minDiff = Math.pow(2, Math.floor(Math.log2(minDiff)))
     }
 
-    const now = Date.now();
-    
     var previousMinDiff = stats.minDiff
     var newMinDiff = Math.max(0.125, minDiff)
     if (newMinDiff != previousMinDiff) {
       this.monitoring.log(`updating vardiff to ${newMinDiff} for client ${stats.workerName}`)
       stats.varDiffWindow = 0
-      stats.varDiffStartTime = now
+      stats.varDiffStartTime = zeroDateMillS
       stats.minDiff = newMinDiff
     }
     return previousMinDiff
   }
 
-  setClientVardiff(minDiff: number): number[] {    
+  setClientVardiff(worker: Worker, minDiff: number): number {    
     // only called for initial diff setting, and clamping is handled during
     // config load
-    var previousMinDiffArr: number[] = []
-    for (const [address, minerData] of this.miners) {
-      const stats = minerData.workerStats;
-      var previousMinDiff = this.updateVarDiff(stats, minDiff, false)
-      this.updateSocketDifficulty(address, minDiff)
-      this.startVarDiff(stats)
-      previousMinDiffArr.push(previousMinDiff)
-    }
-    return previousMinDiffArr
+    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.name)!);
+    var previousMinDiff = this.updateVarDiff(stats, minDiff, false)    
+    this.startVarDiff(stats)    
+    return previousMinDiff
   }
 
-  startClientVardiff() {
-  	for (const [address, minerData] of this.miners) {
-      const stats = minerData.workerStats;
-  	  this.startVarDiff(stats)
-    }
+  startClientVardiff(worker: Worker) {
+    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.name)!);
+  	this.startVarDiff(stats)
   }
   
-  getClientVardiff() : number[] {
-  	var minDiffArr: number[] = []
-    for (const [address, minerData] of this.miners) {
-      const stats = minerData.workerStats;
-      minDiffArr.push(stats.minDiff)
-    }
-  	return minDiffArr
+  getClientVardiff(worker: Worker) : number {
+    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.name)!);
+    return stats.minDiff
   }
 }
 

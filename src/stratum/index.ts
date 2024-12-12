@@ -69,8 +69,17 @@ export default class Stratum extends EventEmitter {
     this.subscriptors.forEach((socket) => {
       if (socket.readyState === "closed") {
         this.subscriptors.delete(socket);
-      } else {
-        this.reflectDifficulty(socket);
+      } else {      
+        socket.data.workers.forEach((worker, _) => {
+          var varDiff = this.sharesManager.getClientVardiff(worker)
+				  if (varDiff != socket.data.difficulty && varDiff != 0) {
+            this.monitoring.log(`Stratum: Updating VarDiff for ${worker.name} from ${socket.data.difficulty} to ${varDiff}`);
+            this.sharesManager.updateSocketDifficulty(worker.address, varDiff)
+            this.reflectDifficulty(socket)
+            this.sharesManager.startClientVardiff(worker)
+          }
+        });
+
         socket.write(tasksData[socket.data.encoding] + '\n');
       }
     });

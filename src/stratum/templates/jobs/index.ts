@@ -19,6 +19,6 @@ export default class Jobs {
   }
 
   expireNext() {
-    this.jobs.delete(this.jobs.entries().next().value[0])
+    this.jobs.delete(this.jobs.entries().next().value![0])
   }
 }

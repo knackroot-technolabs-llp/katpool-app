@@ -56,10 +56,10 @@ monitoring.log(`Main: network: ${config.network}`);
 const rpc = new RpcClient({
   url: "localhost:17210",
   // resolver: new Resolver(
-//     {
-//       urls : ["http://localhost:16210/"],
-//     }
-// ),
+  //   {
+  //     urls : ["http://localhost:16210/"],
+  //   }
+  // ),
   encoding: Encoding.Borsh,
   networkId: config.network,
 });

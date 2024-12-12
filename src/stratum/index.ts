@@ -16,7 +16,6 @@ import Denque from 'denque';
 import JsonBig from 'json-bigint';
 
 const bitMainRegex = new RegExp(".*(GodMiner).*", "i")
-let isBitmain = false;
 
 export default class Stratum extends EventEmitter {
   server: Server;
@@ -85,8 +84,6 @@ export default class Stratum extends EventEmitter {
       const encoding = Encoding[value as keyof typeof Encoding];
       const encodedParams = encodeJob(hash, timestamp, encoding, templateHeader)
       const task: Event<'mining.notify'> = {
-        // id: Number(id),
-        // jsonrpc : "2.0",
         method: 'mining.notify',
         params: [id, encodedParams]
       };
@@ -95,7 +92,6 @@ export default class Stratum extends EventEmitter {
       }
       tasksData[encoding] = JsonBig.stringify(task);
     });
-    // console.log("TasksData[socket.data.encoding] : ", tasksData[Encoding.Bitmain])
     this.subscriptors.forEach((socket) => {
       if (socket.readyState === "closed") {
         this.subscriptors.delete(socket);
@@ -111,7 +107,6 @@ export default class Stratum extends EventEmitter {
       method: 'mining.set_difficulty',
       params: [socket.data.difficulty]
     };
-    // console.log("send mining.set_difficulty : ", JSON.stringify(event));
     socket.write(JSON.stringify(event) + '\n');
   }
 
@@ -129,7 +124,6 @@ export default class Stratum extends EventEmitter {
           const minerType = request.params[0].toLowerCase();
           response.result = [true, "EthereumStratum/1.0.0"]
           if (bitMainRegex.test(minerType)) {
-            isBitmain = true;
             socket.data.encoding = Encoding.Bitmain;
             response.result = [null, this.extraNonce, 8 - Math.floor(this.extraNonce.length / 2)];
           }            
@@ -172,7 +166,6 @@ export default class Stratum extends EventEmitter {
             existingMinerData!.sockets = sockets;
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
           }  
-          // TODO: KN: Test.
           // Set extranonce
           if (socket.data.encoding === Encoding.Bitmain) {
             const event : Event<'mining.set_extranonce'> = {
@@ -192,7 +185,6 @@ export default class Stratum extends EventEmitter {
             }
             socket.write(JSON.stringify(event) + '\n');
           }              
-          // console.log("authorize : socket data difficuty :", socket.data.difficulty);
           this.reflectDifficulty(socket);
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
           break;
@@ -208,8 +200,6 @@ export default class Stratum extends EventEmitter {
             throw Error('Mismatching worker details');
           }
           const hash = this.templates.getHash(request.params[1]);
-          // const hash = "0caf362f5317b4e5471663815773739fc9b0b4067ad40b72612db85cd9add382"
-          console.log("mining.submit ~ request.params :", request.params[1], hash)
           if (!hash) {
             if (DEBUG) this.monitoring.debug(`Stratum: Job not found - Address: ${address}, Worker Name: ${name}`);
             metrics.updateGaugeInc(jobsNotFound, [name, address]);

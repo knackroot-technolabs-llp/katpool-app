@@ -11,7 +11,7 @@ import redis, { type RedisClientType } from 'redis';
 export default class Templates {
   private rpc: RpcClient
   private address: string
-  public templates: Map<string, [ IBlock, PoW ]> = new Map()
+  private templates: Map<string, [ IBlock, PoW ]> = new Map()
   private jobs: Jobs = new Jobs()
   private cacheSize: number
   private monitoring: Monitoring
@@ -25,7 +25,16 @@ export default class Templates {
     this.subscriber = redis.createClient({
       url: "redis://127.0.0.1:6379",
     })
-    this.subscriber.connect()
+    this.redisConnection()
+  }
+
+  redisConnection() {
+    try{
+      this.subscriber.connect()
+      this.monitoring.log(`Connection to redis established`)
+    } catch (err) {
+      this.monitoring.error(`Error connecting to redis : ${err}`)
+    }
   }
 
   getHash (id: string) {

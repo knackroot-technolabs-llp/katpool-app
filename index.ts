@@ -67,7 +67,7 @@ const rpc = new RpcClient({
 try{
   await rpc.connect();
 } catch(err) {
-  console.log("error while connecting", err)
+  monitoring.error(`Error while connecting to rpc url : ${rpc.url}`)
 }
 
 monitoring.log(`Main: RPC connection started`)

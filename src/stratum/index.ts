@@ -39,9 +39,7 @@ export default class Stratum extends EventEmitter {
     this.extraNonce = "";
 
     // Start the VarDiff thread
-    // FALSE in bridge
     const varDiffStats = false; // Enable logging of VarDiff stats
-    // FALSE in bridge
     const clampPow2 = false; // Enable clamping difficulty to powers of 2
     // this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
 
@@ -87,9 +85,6 @@ export default class Stratum extends EventEmitter {
         method: 'mining.notify',
         params: [id, encodedParams]
       };
-      if(encoding === Encoding.Bitmain) {
-        task.params.push(timestamp);
-      }
       tasksData[encoding] = JsonBig.stringify(task);
     });
     this.subscriptors.forEach((socket) => {
@@ -167,24 +162,24 @@ export default class Stratum extends EventEmitter {
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
           }  
           // Set extranonce
-          if (socket.data.encoding === Encoding.Bitmain) {
-            const event : Event<'mining.set_extranonce'> = {
-              method: 'mining.set_extranonce',
-              params: [
-                this.extraNonce, 
-                8 - Math.floor(this.extraNonce.length / 2)
-              ]
-            };
-            if (this.extraNonce != "") {
+          if (this.extraNonce != "") {
+            if (socket.data.encoding === Encoding.Bitmain) {
+              const event : Event<'mining.set_extranonce'> = {
+                method: 'mining.set_extranonce',
+                params: [
+                  this.extraNonce, 
+                  8 - Math.floor(this.extraNonce.length / 2)
+                ]
+              };
               socket.write(JSON.stringify(event) + '\n');
-            }          
-          } else {
-            const event : Event<'set_extranonce'> = {
-              method: 'set_extranonce',
-              params: [randomBytes(4).toString('hex')]
-            }
-            socket.write(JSON.stringify(event) + '\n');
-          }              
+            } else {
+              const event : Event<'mining.set_extranonce'> = {
+                method: 'mining.set_extranonce',
+                params: [randomBytes(4).toString('hex')]
+              }
+              socket.write(JSON.stringify(event) + '\n');
+            }            
+          }  
           this.reflectDifficulty(socket);
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
           break;
@@ -240,15 +235,15 @@ export default class Stratum extends EventEmitter {
               if (!(err instanceof Error)) throw err;
               switch (err.message) {
                 case 'Duplicate share':
-                  console.log("DUPLICATE_SHARE")
+                  this.monitoring.log("DUPLICATE_SHARE")
                   response.error = errors['DUPLICATE_SHARE'];
                   break;
                 case 'Stale header':
-                  console.log("Stale Header : JOB_NOT_FOUND")
+                  this.monitoring.log("Stale Header : JOB_NOT_FOUND")
                   response.error = errors['JOB_NOT_FOUND'];
                   break;
                 case 'Invalid share':
-                  console.log("LOW_DIFFICULTY_SHARE")
+                  this.monitoring.log("LOW_DIFFICULTY_SHARE")
                   response.error = errors['LOW_DIFFICULTY_SHARE'];
                   break;
                 default:

@@ -75,12 +75,12 @@ export default class Stratum extends EventEmitter {
     }    
   }
 
-  announceTemplate(id: string, hash: string, timestamp: bigint, templateHeader: IRawHeader) {
+  announceTemplate(id: string, hash: string, timestamp: bigint, header: IRawHeader) {
     this.monitoring.log(`Stratum: Announcing new template ${id}`);
     const tasksData: { [key in Encoding]?: string } = {};
     Object.values(Encoding).filter(value => typeof value !== 'number').forEach(value => {
       const encoding = Encoding[value as keyof typeof Encoding];
-      const encodedParams = encodeJob(hash, timestamp, encoding, templateHeader)
+      const encodedParams = encodeJob(hash, timestamp, encoding, header)
       const task: Event<'mining.notify'> = {
         method: 'mining.notify',
         params: [id, encodedParams]
@@ -226,7 +226,6 @@ export default class Stratum extends EventEmitter {
               this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, nonce, this.templates)
             }
             catch(err: any) {
-              console.log("error thrown : ", err);
               if (!(err instanceof Error)) throw err;
               switch (err.message) {
                 case 'Duplicate share':

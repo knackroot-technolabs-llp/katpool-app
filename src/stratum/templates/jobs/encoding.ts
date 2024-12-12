@@ -100,14 +100,14 @@ export function generateJobHeader(headerData: Uint8Array): bigint[] {
   return final;
 }
 
-export function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, templateHeader: IRawHeader) {
+export function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, header: IRawHeader) {
   if (encoding === Encoding.BigHeader) {
     const buffer = Buffer.alloc(8)
     buffer.writeBigUInt64LE(timestamp) // hh
   
     return hash + buffer.toString('hex') 
   } else if(encoding === Encoding.Bitmain) {
-    const serializedHeader = serializeBlockHeader(templateHeader);
+    const serializedHeader = serializeBlockHeader(header);
     const jobParams = generateJobHeader(serializedHeader);
     jobParams.push(timestamp)
     return jobParams

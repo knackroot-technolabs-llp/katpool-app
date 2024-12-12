@@ -207,10 +207,10 @@ export default class Templates {
       //     pruningPoint: "fc239a9d84a1e20bbe8232e9133c57229634f2c2ad11800bf4ef4e7f8f6b6a4b",
       //   },
       // }
-      const header = new Header(template.header as IRawHeader);
+      const header = new Header(template.header);
       const headerHash = header.finalize();
 
-      // if (this.templates.has(headerHash)) return
+      if (this.templates.has(headerHash)) return
 
       const proofOfWork = new PoW(header)
       // const stateTarget = proofOfWork.target;
@@ -232,7 +232,7 @@ export default class Templates {
         this.jobs.expireNext()
       }
 
-    callback((this.idCounter).toString(), headerHash, header.timestamp, template.header)
+    callback((this.idCounter).toString(), proofOfWork.prePoWHash, header.timestamp, template.header)
     })
     // })
 

@@ -2,7 +2,7 @@ import blake2b, { type Blake2b } from 'blake2b';
 import type { IRawHeader } from '../../../../wasm/kaspa/kaspa';
 
 export enum Encoding {
-  // BigHeader,
+  BigHeader,
   Bitmain
 }
 
@@ -101,13 +101,12 @@ export function generateJobHeader(headerData: Uint8Array): bigint[] {
 }
 
 export function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, templateHeader: IRawHeader) {
-  // if (encoding === Encoding.BigHeader) {
-  //   const buffer = Buffer.alloc(8)
-  //   buffer.writeBigUInt64LE(timestamp) // hh
+  if (encoding === Encoding.BigHeader) {
+    const buffer = Buffer.alloc(8)
+    buffer.writeBigUInt64LE(timestamp) // hh
   
-  //   return hash + buffer.toString('hex') 
-  // } else 
-  if(encoding === Encoding.Bitmain) {
+    return hash + buffer.toString('hex') 
+  } else if(encoding === Encoding.Bitmain) {
     const serializedHeader = serializeBlockHeader(templateHeader);
     const jobParams = generateJobHeader(serializedHeader);
     return jobParams

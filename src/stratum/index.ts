@@ -174,7 +174,7 @@ export default class Stratum extends EventEmitter {
           }  
           // TODO: KN: Test.
           // Set extranonce
-          if (isBitmain) {
+          if (socket.data.encoding === Encoding.Bitmain) {
             const event : Event<'mining.set_extranonce'> = {
               method: 'mining.set_extranonce',
               params: [
@@ -228,7 +228,7 @@ export default class Stratum extends EventEmitter {
             if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
             // Add extranonce to noncestr if enabled and submitted nonce is shorter than
             // expected (16 - <extranonce length> characters)
-            if (isBitmain && this.extraNonce !== "") {
+            if (socket.data.encoding == Encoding.Bitmain && this.extraNonce !== "") {
               const extranonce2Len = 16 - this.extraNonce.length;
 
               if (request.params[2].length <= extranonce2Len) {
@@ -238,7 +238,7 @@ export default class Stratum extends EventEmitter {
             }
             try{
               let nonce : bigint;
-              if (isBitmain) {
+              if (socket.data.encoding == Encoding.Bitmain) {
                 nonce = BigInt(request.params[2]);
               } else {
                 nonce = BigInt('0x' + request.params[2]);                

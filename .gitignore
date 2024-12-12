@@ -10,3 +10,4 @@ prometheus_data
 db_backup*
 katpool.code-workspace
 katpool-app-logs.txt
+getNewBlockTemplate

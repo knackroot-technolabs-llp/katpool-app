@@ -25,10 +25,10 @@ export default class Templates {
     this.subscriber = redis.createClient({
       url: "redis://127.0.0.1:6379",
     })
-    this.redisConnection()
+    this.connectRedis()
   }
 
-  redisConnection() {
+  connectRedis() {
     try{
       this.subscriber.connect()
       this.monitoring.log(`Connection to redis established`)
@@ -70,7 +70,7 @@ export default class Templates {
     return report.report.type
   }
 
-  async register (callback: (id: string, hash: string, timestamp: bigint, templateHeader: IRawHeader) => void) {
+  async register (callback: (id: string, hash: string, timestamp: bigint, header: IRawHeader) => void) {
     this.monitoring.log(`Templates: Registering new template callback`);
     // this.rpc.addEventListener('new-block-template', async () => {
       // const template = (await this.rpc.getBlockTemplate({
@@ -79,7 +79,7 @@ export default class Templates {
       // })).block as IRawBlock;
 
 
-      this.subscriber.subscribe('templateChannel', (message) => {
+      this.subscriber.subscribe('NewBlockTemplateChannel', (message) => {
       const fetchedTemplate = JSON.parse(message)
       const blockTemplate = {
         header: fetchedTemplate.Block.Header,

@@ -109,7 +109,6 @@ export function encodeJob (hash: string, timestamp: bigint, encoding: Encoding, 
   } else if(encoding === Encoding.Bitmain) {
     const serializedHeader = serializeBlockHeader(header);
     const jobParams = generateJobHeader(serializedHeader);
-    jobParams.push(timestamp)
     return jobParams
   } else throw Error('Unknown encoding')
 }

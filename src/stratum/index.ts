@@ -85,6 +85,9 @@ export default class Stratum extends EventEmitter {
         method: 'mining.notify',
         params: [id, encodedParams]
       };
+      if(encoding === Encoding.Bitmain) {
+        task.params.push(timestamp);
+      }
       tasksData[encoding] = JsonBig.stringify(task);
     });
     this.subscriptors.forEach((socket) => {

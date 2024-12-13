@@ -12,6 +12,13 @@ import fs from 'fs';
 import path from 'path';
 import { ExitStatus, getParsedCommandLineOfConfigFile } from "typescript";
 
+function shutdown() {
+  console.log("\n\n Gracefully shutting down the pool")
+  process.exit();
+}
+
+process.on('SIGINT', shutdown);
+
 export let DEBUG = 0
 if (process.env.DEBUG == "1") {
   DEBUG = 1;
@@ -47,14 +54,21 @@ dotenv.config();
 monitoring.log(`Main: network: ${config.network}`);
 
 const rpc = new RpcClient({
-  resolver: new Resolver({
-    urls : config.node
-  }),
+  url: "localhost:17210",
+  // resolver: new Resolver(
+  //   {
+  //     urls : ["http://localhost:16210/"],
+  //   }
+  // ),
   encoding: Encoding.Borsh,
   networkId: config.network,
 });
 
-await rpc.connect();
+try{
+  await rpc.connect();
+} catch(err) {
+  monitoring.error(`Error while connecting to rpc url : ${rpc.url}`)
+}
 
 monitoring.log(`Main: RPC connection started`)
 

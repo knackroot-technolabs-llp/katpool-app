@@ -172,7 +172,8 @@ export class SharesManager {
     if (!validity) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Invalid share for target: ${target} for miner ${minerId}`);
       metrics.updateGaugeInc(minerInvalidShares, [minerId, address]);
-      throw Error('Invalid share');
+      // throw Error('Invalid share');
+      return
     }
 
     if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);

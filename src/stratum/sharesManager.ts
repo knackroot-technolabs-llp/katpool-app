@@ -1,7 +1,7 @@
 import type { Socket } from 'bun';
 import { calculateTarget } from "../../wasm/kaspa";
 import { Pushgateway } from 'prom-client';
-import Server, { type Worker } from './server';
+import { type Worker } from './server';
 import type { RegistryContentType } from 'prom-client';
 import { stringifyHashrate, getAverageHashrateGHs } from './utils';
 import Monitoring from '../monitoring';

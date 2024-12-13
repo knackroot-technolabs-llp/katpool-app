@@ -477,10 +477,10 @@ export class SharesManager {
   
         // check final stage first, as this is where majority of time spent
         if (window == 0) {
-          if (Math.abs(1-shareRateRatio) >= tolerance) {
+          if (Math.abs(1 - shareRateRatio) >= tolerance) {
             // final stage submission rate OOB
-            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance*100}%%)`)
-            this.updateVarDiff(workerStats, diff*shareRateRatio, clamp)
+            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance*100}%)`)
+            this.updateVarDiff(workerStats, diff * shareRateRatio, clamp)
           }
           continue
         }
@@ -488,10 +488,10 @@ export class SharesManager {
         // check all previously cleared windows
         var i: number = 1
         for (; i < workerStats.varDiffWindow; ) {
-          if (Math.abs(1-shareRateRatio) >= tolerances[i]) {
+          if (Math.abs(1 - shareRateRatio) >= tolerances[i]) {
             // breached tolerance of previously cleared window
-            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i]*100}%%) for ${windows[i]}m window`)
-            this.updateVarDiff(workerStats, diff*shareRateRatio, clamp)
+            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i]*100}%) for ${windows[i]}m window`)
+            this.updateVarDiff(workerStats, diff * shareRateRatio, clamp)
             break
           }
           i++
@@ -502,9 +502,9 @@ export class SharesManager {
         }
   
         // check for current window max exception
-        if (shares >= window*expectedShareRate*(1+tolerance)) {
+        if (shares >= window * expectedShareRate * (1 + tolerance)) {
           // submission rate > window max
-          toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[i]*100}%%) for ${windows[i]}m window`)
+          toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[i]*100}%) for ${windows[i]}m window`)
           this.updateVarDiff(workerStats, diff*shareRateRatio, clamp)
           continue
         }
@@ -512,9 +512,9 @@ export class SharesManager {
         // check whether we've exceeded window length
         if (duration >= window) {
           // check for current window min exception
-          if (shares <= window * expectedShareRate * (1-tolerance)) {
+          if (shares <= window * expectedShareRate * (1 - tolerance)) {
             // submission rate < window min
-            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[i]*100}%%) for ${windows[i]}m window`)
+            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[i]*100}%) for ${windows[i]}m window`)
             this.updateVarDiff(workerStats, diff * Math.max(shareRateRatio, 0.1), clamp)
             continue
           }
@@ -545,7 +545,7 @@ export class SharesManager {
 
   // update vardiff with new mindiff, reset counters, and disable tracker until
   // client handler restarts it while sending diff on next block
-  updateVarDiff(stats : WorkerStats, minDiff: number, clamp: boolean) : number{
+  updateVarDiff(stats : WorkerStats, minDiff: number, clamp: boolean): number {
     if (clamp) {
       minDiff = Math.pow(2, Math.floor(Math.log2(minDiff)))
     }
@@ -554,17 +554,17 @@ export class SharesManager {
     var newMinDiff = Math.max(0.125, minDiff)
     if (newMinDiff != previousMinDiff) {
       this.monitoring.log(`updating vardiff to ${newMinDiff} for client ${stats.workerName}`)
-      stats.varDiffWindow = 0
       stats.varDiffStartTime = zeroDateMillS
+      stats.varDiffWindow = 0
       stats.minDiff = newMinDiff
     }
     return previousMinDiff
   }
 
   setClientVardiff(worker: Worker, minDiff: number): number {    
+    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.name)!);
     // only called for initial diff setting, and clamping is handled during
     // config load
-    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.name)!);
     var previousMinDiff = this.updateVarDiff(stats, minDiff, false)    
     this.startVarDiff(stats)    
     return previousMinDiff
@@ -575,12 +575,8 @@ export class SharesManager {
   	this.startVarDiff(stats)
   }
   
-  getClientVardiff(worker: Worker) : number {
+  getClientVardiff(worker: Worker): number {
     const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.name)!);
     return stats.minDiff
   }
 }
-
-
-
-

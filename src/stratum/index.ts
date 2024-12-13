@@ -25,7 +25,9 @@ export default class Stratum extends EventEmitter {
   private monitoring: Monitoring
   sharesManager: SharesManager;
   private minerDataLock = new Mutex();
-  extraNonce : string;
+  private extraNonceSize:number;
+  private maxExtranonce: number;
+  private nextExtranonce:number;
 
   constructor(templates: Templates, port: number, initialDifficulty: number, pushGatewayUrl: string, poolAddress: string, sharesPerMin: number) {
     super();
@@ -36,43 +38,19 @@ export default class Stratum extends EventEmitter {
     this.templates = templates;
     this.templates.register((id, hash, timestamp, header) => this.announceTemplate(id, hash, timestamp, header));
     this.monitoring.log(`Stratum: Initialized with difficulty ${this.difficulty}`);
-    this.extraNonce = "";
 
     // Start the VarDiff thread
-    const varDiffStats = false; // Enable logging of VarDiff stats
-    const clampPow2 = false; // Enable clamping difficulty to powers of 2
+    const varDiffStats = true; // Enable logging of VarDiff stats
+    const clampPow2 = true; // Enable clamping difficulty to powers of 2
     this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
 
-    this.getExtraNonce();
-  }
-
-  getExtraNonce() {
     if (!process.env.EXTRANONCE_SIZE) {
       console.error("Extranonce size is not set in env.")
       process.exit(1);
     }
-    var extranonceSize = Number(process.env.EXTRANONCE_SIZE);
-    var maxExtranonce = Math.pow(2, 8 * Math.min(extranonceSize, 3)) - 1;
-    var nextExtranonce = 0;
-          
-    var lExtranonce = 0;
-    if (extranonceSize > 0) {
-      lExtranonce = nextExtranonce;
-
-      if (nextExtranonce < maxExtranonce) {
-        nextExtranonce++;
-      } else {
-        nextExtranonce = 0;
-        this.monitoring.log(
-          "WARN : Wrapped extranonce! New clients may be duplicating work..."
-        );
-      }
-    }
-
-    // Format extranonce as a hexadecimal string with padding
-    if (extranonceSize > 0) {
-      this.extraNonce = lExtranonce.toString(16).padStart(extranonceSize * 2, "0");
-    }    
+    this.extraNonceSize = Number(process.env.EXTRANONCE_SIZE);
+    this.maxExtranonce = Math.pow(2, 8 * Math.min(this.extraNonceSize, 3)) - 1;
+    this.nextExtranonce = 0;
   }
 
   announceTemplate(id: string, hash: string, timestamp: bigint, header: IRawHeader) {
@@ -121,9 +99,25 @@ export default class Stratum extends EventEmitter {
           if (this.subscriptors.has(socket)) throw Error('Already subscribed');
           const minerType = request.params[0].toLowerCase();
           response.result = [true, "EthereumStratum/1.0.0"]
+          let lExtranonce = 0;
+          if (this.extraNonceSize > 0) {
+            lExtranonce = this.nextExtranonce;
+
+            if (this.nextExtranonce < this.maxExtranonce) {
+              this.nextExtranonce++;
+            } else {
+              this.nextExtranonce = 0;
+              this.monitoring.log("WARN : Wrapped extranonce! New clients may be duplicating work...");
+            }
+          }
+
+          // Format extranonce as a hexadecimal string with padding
+          if (this.extraNonceSize > 0) {
+            socket.data.extraNonce = lExtranonce.toString(16).padStart(this.extraNonceSize * 2, "0");
+          }   
           if (bitMainRegex.test(minerType)) {
             socket.data.encoding = Encoding.Bitmain;
-            response.result = [null, this.extraNonce, 8 - Math.floor(this.extraNonce.length / 2)];
+            response.result = [null, socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)];
           }            
           this.subscriptors.add(socket);        
           this.emit('subscription', socket.remoteAddress, request.params[0]);
@@ -165,10 +159,10 @@ export default class Stratum extends EventEmitter {
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
           }  
           // Set extranonce
-          if (this.extraNonce != "") {
+          if (socket.data.extraNonce != "") {
             let params;
             if (socket.data.encoding === Encoding.Bitmain) {
-                params = [ this.extraNonce, 8 - Math.floor(this.extraNonce.length / 2)]
+                params = [ socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)]
             } else {
                 params= [randomBytes(4).toString('hex')]
             }     
@@ -211,12 +205,12 @@ export default class Stratum extends EventEmitter {
             if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
             // Add extranonce to noncestr if enabled and submitted nonce is shorter than
             // expected (16 - <extranonce length> characters)
-            if (socket.data.encoding == Encoding.Bitmain && this.extraNonce !== "") {
-              const extranonce2Len = 16 - this.extraNonce.length;
+            if (socket.data.encoding == Encoding.Bitmain && socket.data.extraNonce !== "") {
+              const extranonce2Len = 16 - socket.data.extraNonce.length;
 
               if (request.params[2].length <= extranonce2Len) {
                 request.params[2] =
-                this.extraNonce + request.params[2].padStart(extranonce2Len, "0");
+                socket.data.extraNonce + request.params[2].padStart(extranonce2Len, "0");
               }
             }
             try{

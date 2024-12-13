@@ -57,9 +57,11 @@ In `prometheus.yml` **update the targets**.
 
 Check `config/config.json` and do the required configurations to your pool.
 
-Here please prepend your own node. 
+* **extraNonceSize** The value should be between 0 to 3.
 
-If it fails, you can update the code in `index.ts` as
+* Here please prepend your own **node**. 
+
+  * If it fails, you can update the code in `index.ts` as
 
 ```JS
 const rpc = new RpcClient({

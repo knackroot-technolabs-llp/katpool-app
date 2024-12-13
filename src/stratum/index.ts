@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto';
 import Server, { type Miner, type Worker } from './server';
 import { type Request, type Response, type Event, errors } from './server/protocol';
 import type Templates from './templates/index.ts';
-import { Address } from "../../wasm/kaspa";
+import { Address, type IRawHeader } from "../../wasm/kaspa";
 import { Encoding, encodeJob } from './templates/jobs/encoding.ts';
 import { SharesManager } from './sharesManager';
 import { minerjobSubmissions, jobsNotFound } from '../prometheus'
@@ -13,7 +13,9 @@ import { DEBUG } from '../../index'
 import { Mutex } from 'async-mutex';
 import { metrics } from '../../index';
 import Denque from 'denque';
+import JsonBig from 'json-bigint';
 
+const bitMainRegex = new RegExp(".*(GodMiner).*", "i")
 
 export default class Stratum extends EventEmitter {
   server: Server;
@@ -23,6 +25,9 @@ export default class Stratum extends EventEmitter {
   private monitoring: Monitoring
   sharesManager: SharesManager;
   private minerDataLock = new Mutex();
+  private extraNonceSize:number;
+  private maxExtranonce: number;
+  private nextExtranonce:number;
 
   constructor(templates: Templates, port: number, initialDifficulty: number, pushGatewayUrl: string, poolAddress: string, sharesPerMin: number) {
     super();
@@ -31,7 +36,7 @@ export default class Stratum extends EventEmitter {
     this.server = new Server(port, initialDifficulty, this.onMessage.bind(this));
     this.difficulty = initialDifficulty;
     this.templates = templates;
-    this.templates.register((id, hash, timestamp) => this.announceTemplate(id, hash, timestamp));
+    this.templates.register((id, hash, timestamp, header) => this.announceTemplate(id, hash, timestamp, header));
     this.monitoring.log(`Stratum: Initialized with difficulty ${this.difficulty}`);
 
     // Start the VarDiff thread
@@ -39,23 +44,35 @@ export default class Stratum extends EventEmitter {
     const clampPow2 = true; // Enable clamping difficulty to powers of 2
     this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
 
+    if (!process.env.EXTRANONCE_SIZE) {
+      console.error("Extranonce size is not set in env.")
+      process.exit(1);
+    }
+    this.extraNonceSize = Number(process.env.EXTRANONCE_SIZE);
+    this.maxExtranonce = Math.pow(2, 8 * Math.min(this.extraNonceSize, 3)) - 1;
+    this.nextExtranonce = 0;
   }
 
-  announceTemplate(id: string, hash: string, timestamp: bigint) {
+  announceTemplate(id: string, hash: string, timestamp: bigint, header: IRawHeader) {
     this.monitoring.log(`Stratum: Announcing new template ${id}`);
     const tasksData: { [key in Encoding]?: string } = {};
     Object.values(Encoding).filter(value => typeof value !== 'number').forEach(value => {
       const encoding = Encoding[value as keyof typeof Encoding];
+      const encodedParams = encodeJob(hash, timestamp, encoding, header)
       const task: Event<'mining.notify'> = {
         method: 'mining.notify',
-        params: [id, ...encodeJob(hash, timestamp, encoding)]
+        params: [id, encodedParams]
       };
-      tasksData[encoding] = JSON.stringify(task);
+      if(encoding === Encoding.Bitmain) {
+        task.params.push(timestamp);
+      }
+      tasksData[encoding] = JsonBig.stringify(task);
     });
     this.subscriptors.forEach((socket) => {
       if (socket.readyState === "closed") {
         this.subscriptors.delete(socket);
       } else {
+        this.reflectDifficulty(socket);
         socket.write(tasksData[socket.data.encoding] + '\n');
       }
     });
@@ -80,8 +97,29 @@ export default class Stratum extends EventEmitter {
       switch (request.method) {
         case 'mining.subscribe': {
           if (this.subscriptors.has(socket)) throw Error('Already subscribed');
-          this.subscriptors.add(socket);
-          response.result = [true, 'EthereumStratum/1.0.0'];
+          const minerType = request.params[0].toLowerCase();
+          response.result = [true, "EthereumStratum/1.0.0"]
+          let lExtranonce = 0;
+          if (this.extraNonceSize > 0) {
+            lExtranonce = this.nextExtranonce;
+
+            if (this.nextExtranonce < this.maxExtranonce) {
+              this.nextExtranonce++;
+            } else {
+              this.nextExtranonce = 0;
+              this.monitoring.log("WARN : Wrapped extranonce! New clients may be duplicating work...");
+            }
+          }
+
+          // Format extranonce as a hexadecimal string with padding
+          if (this.extraNonceSize > 0) {
+            socket.data.extraNonce = lExtranonce.toString(16).padStart(this.extraNonceSize * 2, "0");
+          }   
+          if (bitMainRegex.test(minerType)) {
+            socket.data.encoding = Encoding.Bitmain;
+            response.result = [null, socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)];
+          }            
+          this.subscriptors.add(socket);        
           this.emit('subscription', socket.remoteAddress, request.params[0]);
           this.monitoring.log(`Stratum: Miner subscribed from ${socket.remoteAddress}`);
           break;
@@ -119,13 +157,21 @@ export default class Stratum extends EventEmitter {
             const existingMinerData = this.sharesManager.getMiners().get(worker.address);
             existingMinerData!.sockets = sockets;
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
-          }
-
-          const event: Event<'set_extranonce'> = {
-            method: 'set_extranonce',
-            params: [randomBytes(4).toString('hex')]
-          };
-          socket.write(JSON.stringify(event) + '\n');
+          }  
+          // Set extranonce
+          if (socket.data.extraNonce != "") {
+            let params;
+            if (socket.data.encoding === Encoding.Bitmain) {
+                params = [ socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)]
+            } else {
+                params= [randomBytes(4).toString('hex')]
+            }     
+            const event : Event<'mining.set_extranonce'> = {
+              method: 'mining.set_extranonce',
+              params: params,
+            }       
+            socket.write(JSON.stringify(event) + '\n');
+          }  
           this.reflectDifficulty(socket);
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
           break;
@@ -144,6 +190,10 @@ export default class Stratum extends EventEmitter {
           if (!hash) {
             if (DEBUG) this.monitoring.debug(`Stratum: Job not found - Address: ${address}, Worker Name: ${name}`);
             metrics.updateGaugeInc(jobsNotFound, [name, address]);
+            response.result = false
+            response.error = errors["JOB_NOT_FOUND"]
+            return response
+            // throw Error("Hash not found")
           }
           else {
             const minerId = name;
@@ -153,23 +203,45 @@ export default class Stratum extends EventEmitter {
             if (DEBUG) this.monitoring.debug(`Stratum: Current difficulties - Worker: ${workerDiff}, Socket: ${socketDiff}`);
             const currentDifficulty = workerDiff || socketDiff;
             if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
-            await this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, BigInt('0x' + request.params[2]), this.templates).catch(err => {
+            // Add extranonce to noncestr if enabled and submitted nonce is shorter than
+            // expected (16 - <extranonce length> characters)
+            if (socket.data.encoding == Encoding.Bitmain && socket.data.extraNonce !== "") {
+              const extranonce2Len = 16 - socket.data.extraNonce.length;
+
+              if (request.params[2].length <= extranonce2Len) {
+                request.params[2] =
+                socket.data.extraNonce + request.params[2].padStart(extranonce2Len, "0");
+              }
+            }
+            try{
+              let nonce : bigint;
+              if (socket.data.encoding == Encoding.Bitmain) {
+                nonce = BigInt(request.params[2]);
+              } else {
+                nonce = BigInt('0x' + request.params[2]);                
+              }
+              this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, nonce, this.templates)
+            }
+            catch(err: any) {
               if (!(err instanceof Error)) throw err;
               switch (err.message) {
                 case 'Duplicate share':
+                  this.monitoring.debug("DUPLICATE_SHARE")
                   response.error = errors['DUPLICATE_SHARE'];
                   break;
                 case 'Stale header':
+                  this.monitoring.debug("Stale Header : JOB_NOT_FOUND")
                   response.error = errors['JOB_NOT_FOUND'];
                   break;
                 case 'Invalid share':
+                  this.monitoring.debug("LOW_DIFFICULTY_SHARE")
                   response.error = errors['LOW_DIFFICULTY_SHARE'];
                   break;
                 default:
                   throw err;
               }
               response.result = false;
-            });
+            }
           }
           break;
         }

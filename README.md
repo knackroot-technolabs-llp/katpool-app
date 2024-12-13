@@ -4,7 +4,6 @@ Once the RPC connection is established, the pool initializes the treasury, which
 
 The shares are validated, and their difficulty is checked. Valid shares are counted, and blocks found are recorded. The pool uses this data to calculate the total hash rate and the contributions of each miner. Periodically, the pool distributes rewards based on each miner's contribution, allocating payments from the treasury and having them ready for the next payment cycle.
 
-
 ## Download Kaspa WASM
 ** IMPORTANT **
 Before anything, add wasm foolder to the local folder
@@ -15,16 +14,16 @@ Validate the location with the imports in the code.
 ## Docker Compose
 The recommended installation is via docker compose. There are many instances that are required to have a full functionality of the pool solution.
 
-![internal container design](images/kaspool-internal-container-design.jpg)
+![internal container design](images/katpool-internal-container-design.jpg)
 
 ### Container Instances
 
-* kaspool-app: main app and object of this repository
-* kaspool-db: postgres DB
-* [kaspool-monitor](https://github.com/coinchimp/kaspool-monitor): taking the initial config from kaspool and sharing miner balances and total to prometheus and via APIs.
+* katpool-app: main app and object of this repository
+* katpool-db: postgres DB
+* [katpool-monitor](https://github.com/argonmining/katpool-monitor): taking the initial config from katpool and sharing miner balances and total to prometheus and via APIs.
 * prometheus: displaying metrics of the pool
-* pushgateway: receiving metrics form kaspool to have them passed to prometheus
-* [kaspool-payment](https://github.com/coinchimp/kaspool-payment) (still under development): taking balances from the database and distibuting payments
+* pushgateway: receiving metrics from katpool to have them passed to prometheus
+* [katpool-payment](https://github.com/argonmining/katpool-payment) (still under development): taking balances from the database and distibuting payments
 
 ### Create env variables
 create .env file
@@ -33,17 +32,18 @@ TREASURY_PRIVATE_KEY=<private key>
 POSTGRES_USER=<db-user>
 POSTGRES_PASSWORD=<db-passwd>
 POSTGRES_DB=<db-name>
-POSTGRES_HOSTNAME='kaspool-db'
-DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@kaspool-db:5432/${POSTGRES_DB}"
-PUSHGATEWAY="http://kaspool-pushgateway:9091"
+POSTGRES_HOSTNAME='katpool-db' # Configure the hostname.
+DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOSTNAME}:5432/${POSTGRES_DB}"
+PUSHGATEWAY="http://katpool-pushgateway:9091" # Configure the pushgateway url.
+MONITOR="http://katpool-monitor:9302" # Configure the monitor url.
 DEBUG=1
 ```
-For now, all the instances share the same env var. However, in the future, it's better to set the private key to the payment app. kaspool-app instance won't need it.
+For now, all the instances share the same env var. However, in the future, it's better to set the private key to the payment app. katpool-app instance won't need it.
 
 ### requires folders and files
 
 Create `postgres_data` folder at the repository root location for the postgres data files, and make that info persistant between restarts, and ensure the following files are present:
-* prometheus.yml: prometheus scrape configuration (you don't need to modify it)
+* prometheus.yml: prometheus scrape configuration
 * init.sql: to setup the database the first time it's started
 * nginx.conf
 * config 
@@ -53,22 +53,35 @@ Additionally:
 * **prometheus_data** folder: Optionally you can uncomment prometheus_data in docker_compose.yml to bring persistency between restarts. Prometheus requires writes and read permissions.
 
 ### Configuration
+In `prometheus.yml` **update the targets**.
 
-Check `config/config.json` and do the required configurations to your pool
+Check `config/config.json` and do the required configurations to your pool.
+
+Here please prepend your own node. 
+
+If it fails, you can update the code in `index.ts` as
+
+```JS
+const rpc = new RpcClient({
+  resolver: new Resolver(), // Random assignment
+  encoding: Encoding.Borsh,
+  networkId: config.network,
+});
+```
 
 ### Container Images
 
 We have added public images to docker-compose.yml to make ieasier the deployment, but in case you want to do changes to the code and test it, you can create your own local image via:
 ```
-docker build -t kaspool-app:0.65 .
+docker build -t katpool-app:0.65 .
 ```
 Dockerfile must be present int the same location where you are running this command.
 remember to modify docker-image.yml with your own image.
 
-### Start abd check the pool
+### Start and check the pool
 
 To start the pool, you need to run `docker compose up -d` or the required command depending of your dcker setup
-You can use `docker logs -f kaspool-app` to see the output of your pool instance. We recommned to use DEBUG=1 at the beginning.
+You can use `docker logs -f katpool-app` to see the output of your pool instance. We recommned to use DEBUG=1 at the beginning.
 After ten minites you should be able to connect to the metrics, received info fo the state of the treasury and configurations via port 8080 at the following paths
 
 * `http://<pool-server>:8080` it would take you to the promtheus interface. Check the `index.ts` file in `src/prometheus` folder for the metrics.
@@ -76,11 +89,10 @@ After ten minites you should be able to connect to the metrics, received info fo
 * `http://<pool-server>:8080/balance` to see the balance for all miners
 * `http://<pool-server>:8080/total` to see the total been rewarded to the miners ever
 
-
 ### Backup
 
 Optionally, you can add a backup process to the DB. Check the ./backup folder.
-You can build the suggested image via `docker build -t kaspool-backup:0.4 .` and uncomment its part in the docker-compose.yml file.
+You can build the suggested image via `docker build -t katpool-backup:0.4 .` and uncomment its part in the docker-compose.yml file.
 We recommend to transfer the database dump files to other location as additional protection.
 
 ## How to install locally using bun (not recommended)
@@ -90,18 +102,25 @@ To install dependencies:
 bun install
 ```
 
-## How the Database si setup
+## How the Database is setup
 We are using Postgres as our database:
 ```sql
-CREATE TABLE miners_balance (
+CREATE TABLE IF NOT EXISTS miners_balance (
   id VARCHAR(255) PRIMARY KEY, 
   miner_id VARCHAR(255), 
   wallet VARCHAR(255),
   balance NUMERIC
 );
-CREATE TABLE wallet_total (
+CREATE TABLE IF NOT EXISTS wallet_total (
   address VARCHAR(255) PRIMARY KEY,
   total NUMERIC
+);
+CREATE TABLE IF NOT EXISTS payments (
+    id SERIAL PRIMARY KEY,
+    wallet_address VARCHAR(255) NOT NULL,
+    amount NUMERIC(20, 8) NOT NULL,
+    timestamp TIMESTAMP DEFAULT NOW(),
+    transaction_hash VARCHAR(255) NOT NULL
 );
 ```
 

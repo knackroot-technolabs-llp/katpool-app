@@ -10,6 +10,7 @@ export type Worker = {
 
 export type Miner = {
   difficulty: number
+  extraNonce: string
   workers: Map<string, Worker>
   encoding: Encoding 
   cachedBytes: string
@@ -43,6 +44,7 @@ export default class Server {
 
   private onConnect (socket: Socket<Miner>) {
     socket.data = {
+      extraNonce: "",
       difficulty: this.difficulty,
       workers: new Map(),
       encoding: Encoding.BigHeader,

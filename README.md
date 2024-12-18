@@ -57,13 +57,15 @@ In `prometheus.yml` **update the targets**.
 
 Check `config/config.json` and do the required configurations to your pool.
 
-* **block_wait_time**: time to wait since last new block message from kaspad before manually requesting a new block. 
+* **block_wait_time_seconds**: time to wait since last new block message from kaspad before manually requesting a new block. 
 
   * **Note**: It is to be set in **seconds**.
 
-Here please prepend your own node. 
+* **extraNonceSize** The value should be between 0 to 3.
 
-If it fails, you can update the code in `index.ts` as
+* Here please prepend your own **node**. 
+
+  * If it fails, you can update the code in `index.ts` as
 
 ```JS
 const rpc = new RpcClient({

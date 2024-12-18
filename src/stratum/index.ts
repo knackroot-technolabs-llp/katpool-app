@@ -14,6 +14,7 @@ import { Mutex } from 'async-mutex';
 import { metrics } from '../../index';
 import Denque from 'denque';
 import JsonBig from 'json-bigint';
+import config from "../../config/config.json";
 
 const bitMainRegex = new RegExp(".*(GodMiner).*", "i")
 
@@ -40,15 +41,11 @@ export default class Stratum extends EventEmitter {
     this.monitoring.log(`Stratum: Initialized with difficulty ${this.difficulty}`);
 
     // Start the VarDiff thread
-    const varDiffStats = true; // Enable logging of VarDiff stats
-    const clampPow2 = true; // Enable clamping difficulty to powers of 2
+    const varDiffStats = config.stratum.varDiff.varDiffStats || true; // Enable logging of VarDiff stats
+    const clampPow2 = config.stratum.varDiff.clampPow2 || true; // Enable clamping difficulty to powers of 2
     this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
 
-    if (!process.env.EXTRANONCE_SIZE) {
-      console.error("Extranonce size is not set in env.")
-      process.exit(1);
-    }
-    this.extraNonceSize = Number(process.env.EXTRANONCE_SIZE);
+    this.extraNonceSize = Number(config.stratum.extraNonceSize) || 0;
     this.maxExtranonce = Math.pow(2, 8 * Math.min(this.extraNonceSize, 3)) - 1;
     this.nextExtranonce = 0;
   }

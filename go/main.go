@@ -29,6 +29,7 @@ type KaspaApi struct {
 
 type BridgeConfig struct {
 	RPCServer        []string `json:"node"`
+	Network 		 string   `json:"network"`
 	BlockWaitTimeSec string   `json:"block_wait_time_seconds"`
 	RedisAddress     string   `json:"redis_address"`
 	RedisChannel     string   `json:"redis_channel"`
@@ -96,7 +97,6 @@ func main() {
 
 	// Step 2: Read environment variables
 	privateKey := os.Getenv("TREASURY_PRIVATE_KEY")
-	network := os.Getenv("NETWORK")
 
 	// Open the JSON file
 	file, err := os.Open("../config/config.json")
@@ -116,7 +116,7 @@ func main() {
 	}
 	log.Println("Config : %v", config)
 
-	address, err := fetchKaspaAccountFromPrivateKey(network, privateKey)
+	address, err := fetchKaspaAccountFromPrivateKey(config.Network, privateKey)
 	if err != nil {
 		log.Fatalf("failed to retrieve address from private key : %v", err)
 	}

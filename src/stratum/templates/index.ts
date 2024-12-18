@@ -24,7 +24,7 @@ export default class Templates {
     this.address = address
     this.cacheSize = cacheSize
     this.subscriber = redis.createClient({
-      url: config.redis_address,
+      url: "redis://" + config.redis_address,
     })
     this.connectRedis()
   }

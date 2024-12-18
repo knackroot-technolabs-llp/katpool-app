@@ -1,21 +1,23 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
-	"path"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/pkg/errors"
+	"github.com/joho/godotenv"
 	"github.com/kaspanet/kaspad/app/appmessage"
+	"github.com/kaspanet/kaspad/cmd/kaspawallet/libkaspawallet"
 	"github.com/kaspanet/kaspad/infrastructure/network/rpcclient"
+	"github.com/kaspanet/kaspad/util"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	"gopkg.in/yaml.v2"
 )
 
 type KaspaApi struct {
@@ -23,6 +25,13 @@ type KaspaApi struct {
 	blockWaitTime time.Duration
 	kaspad        *rpcclient.RPCClient
 	connected     bool
+}
+
+type BridgeConfig struct {
+	RPCServer        []string `json:"node"`
+	BlockWaitTimeSec string   `json:"block_wait_time_seconds"`
+	RedisAddress     string   `json:"redis_address"`
+	RedisChannel     string   `json:"redis_channel"`
 }
 
 func NewKaspaAPI(address string, blockWaitTime time.Duration) (*KaspaApi, error) {
@@ -39,16 +48,38 @@ func NewKaspaAPI(address string, blockWaitTime time.Duration) (*KaspaApi, error)
 	}, nil
 }
 
-type BridgeConfig struct {
-	RPCServer     string        `yaml:"kaspad_address"`
-	BlockWaitTime time.Duration `yaml:"block_wait_time"`
-	RedisAddress  string        `yaml:"redis_address"`
-	RedisChannel  string        `yaml:"redis_channel"`
+func fetchKaspaAccountFromPrivateKey(network, privateKeyHex string) (string, error) {
+	prefix := util.Bech32PrefixKaspa
+	if network == "testnet-10" {
+		prefix = util.Bech32PrefixKaspaTest
+	}
+
+	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
+	if err != nil {
+		return "", err
+	}
+
+	publicKeybytes, err := libkaspawallet.PublicKeyFromPrivateKey(privateKeyBytes)
+	if err != nil {
+		return "", err
+	}
+
+	addressPubKey, err := util.NewAddressPublicKey(publicKeybytes, prefix)
+	if err != nil {
+		return "", err
+	}
+
+	address, err := util.DecodeAddress(addressPubKey.String(), prefix)
+	if err != nil {
+		return "", err
+	}
+
+	return address.EncodeAddress(), nil
 }
 
-func (ks *KaspaApi) GetBlockTemplate() (*appmessage.GetBlockTemplateResponseMessage, error) {
-	template, err := ks.kaspad.GetBlockTemplate("kaspa:qyppkat8emnevrdtnu4hkkc6dmwj4xwmfh9ne3ncng49azgta7sg0ncrthn2erh",
-		fmt.Sprintf(`'%s' via onemorebsmith/kaspa-stratum-bridge_%s`, "GodMiner/2.0.0", "v1.2.1"))
+func (ks *KaspaApi) GetBlockTemplate(miningAddr string) (*appmessage.GetBlockTemplateResponseMessage, error) {
+	template, err := ks.kaspad.GetBlockTemplate(miningAddr,
+		"Katpool")
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed fetching new block template from kaspa")
@@ -57,25 +88,48 @@ func (ks *KaspaApi) GetBlockTemplate() (*appmessage.GetBlockTemplateResponseMess
 }
 
 func main() {
-	// Load configuration
-	pwd, _ := os.Getwd()
-	fullPath := path.Join(pwd, "config.yaml")
-	log.Printf("loading config @ `%s`", fullPath)
-	rawCfg, err := ioutil.ReadFile(fullPath)
+	// Step 1: Load .env file
+	err := godotenv.Load("../.env")
 	if err != nil {
-		log.Printf("config file not found: %s", err)
-		os.Exit(1)
+		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	cfg := BridgeConfig{}
-	if err := yaml.Unmarshal(rawCfg, &cfg); err != nil {
-		log.Printf("failed parsing config file: %s", err)
-		os.Exit(1)
+	// Step 2: Read environment variables
+	privateKey := os.Getenv("TREASURY_PRIVATE_KEY")
+	network := os.Getenv("NETWORK")
+
+	// Open the JSON file
+	file, err := os.Open("../config/config.json")
+	if err != nil {
+		fmt.Printf("Error opening file: %v\n", err)
+		return
 	}
-	fmt.Printf("%v", cfg)
+	defer file.Close()
+
+	// Decode JSON into the struct
+	var config BridgeConfig
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&config)
+	if err != nil {
+		fmt.Printf("Error decoding JSON: %v\n", err)
+		return
+	}
+	log.Println("Config : %v", config)
+
+	address, err := fetchKaspaAccountFromPrivateKey(network, privateKey)
+	if err != nil {
+		log.Fatalf("failed to retrieve address from private key : %v", err)
+	}
+	log.Println("Address : ", address)
 
 	// Initialize Kaspa API
-	ksApi, err := NewKaspaAPI(cfg.RPCServer, cfg.BlockWaitTime)
+	num, err := strconv.Atoi(config.BlockWaitTimeSec)
+	if err != nil {
+		fmt.Println("Error: Invalid BlockWaitTimeSec : ", err)
+		return
+	}
+
+	ksApi, err := NewKaspaAPI(config.RPCServer[0], time.Duration(num))
 	if err != nil {
 		log.Fatalf("failed to initialize Kaspa API: %v", err)
 	}
@@ -83,7 +137,7 @@ func main() {
 	// Initialize Redis client
 	ctx := context.Background()
 	rdb := redis.NewClient(&redis.Options{
-		Addr: cfg.RedisAddress,
+		Addr: config.RedisAddress,
 	})
 	defer rdb.Close()
 
@@ -99,7 +153,7 @@ func main() {
 	// Start a goroutine to continuously fetch block templates and publish them to Redis
 	go func() {
 		for {
-			template, err := ksApi.GetBlockTemplate()
+			template, err := ksApi.GetBlockTemplate(address)
 			if err != nil {
 				log.Printf("error fetching block template: %v", err)
 				time.Sleep(ksApi.blockWaitTime)
@@ -119,11 +173,11 @@ func main() {
 			}
 
 			// Publish the JSON to Redis
-			err = rdb.Publish(ctx, cfg.RedisChannel, templateJSON).Err()
+			err = rdb.Publish(ctx, config.RedisChannel, templateJSON).Err()
 			if err != nil {
 				log.Printf("error publishing to Redis: %v", err)
 			} else {
-				log.Printf("template published to Redis channel %s", cfg.RedisChannel)
+				log.Printf("template published to Redis channel %s", config.RedisChannel)
 			}
 
 			time.Sleep(ksApi.blockWaitTime)

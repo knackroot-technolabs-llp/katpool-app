@@ -7,6 +7,7 @@ import { DEBUG } from '../../../index'
 import { metrics } from '../../../index';   
 import JsonBig from 'json-bigint';
 import redis, { type RedisClientType } from 'redis';
+import config from '../../../config/config.json';
 
 export default class Templates {
   private rpc: RpcClient
@@ -23,7 +24,7 @@ export default class Templates {
     this.address = address
     this.cacheSize = cacheSize
     this.subscriber = redis.createClient({
-      url: "redis://127.0.0.1:6379",
+      url: config.redis_address,
     })
     this.connectRedis()
   }
@@ -78,11 +79,12 @@ export default class Templates {
       //   extraData: "Katpool"
       // })).block as IRawBlock;
 
-
-      this.subscriber.subscribe('NewBlockTemplateChannel', (message) => {
+    const templateChannel = config.redis_channel
+      this.subscriber.subscribe(templateChannel, (message) => {
       const fetchedTemplate = JSON.parse(message)
       const blockTemplate = {
         header: fetchedTemplate.Block.Header,
+        transactions: fetchedTemplate.Block.Transactions,
       }
       function convertJson(data: any) {
         // Recursively traverse and transform keys
@@ -131,8 +133,37 @@ export default class Templates {
         blueScore: BigInt(converted.header.bluescore),
         pruningPoint: converted.header.pruningpoint,
       }
+      const tTransactions = converted.transactions.map( (tx: any) => ({
+        version: tx.version,
+        inputs: tx.inputs.length > 0 ?
+            tx.inputs.map((inputItem: any) => ({
+              previousOutpoint: {
+                transactionId: inputItem.previousoutpoint.transactionid,
+                index: inputItem.previousoutpoint.index,
+              },
+              signatureScript: inputItem.signaturescript,
+              sequence: BigInt(inputItem.sequence),
+              sigOpCount: inputItem.sigopcount,
+              verboseData: inputItem.verbosedata,
+            }))
+        : tx.inputs,
+        outputs: tx.outputs.length > 0 ? 
+            tx.outputs.map( (outputItem: any) => ({
+              value: BigInt(outputItem.amount),
+              scriptPublicKey: outputItem.scriptpublickey,
+              verboseData: outputItem.verbosedata,
+            })) 
+        : tx.outputs,
+        lockTime: BigInt(tx.locktime),
+        subnetworkId: tx.subnetworkid,
+        gas: BigInt(tx.gas),
+        payload: tx.payload,
+        mass: BigInt(tx.mass || 0),
+        verboseData: tx.verbosedata,
+      }))
       const template = {
         header: tHeader,
+        transactions: tTransactions,
       }
       if ((template.header.blueWork as string).length % 2 !== 0) {
         template.header.blueWork = '0' + template.header.blueWork;

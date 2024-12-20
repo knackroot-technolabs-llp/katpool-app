@@ -64,8 +64,10 @@ export default class Templates {
     
     if (report.report.type == "success") {
       metrics.updateGaugeInc(paidBlocksGauge, [minerId, this.address]);
-    }
-    if (DEBUG) this.monitoring.debug(`Templates: the block has been ${report.report.type}, reason: ${report.report.reason} for miner : ${minerId}`)
+      if (DEBUG) this.monitoring.debug(`Templates: the block has been ${report.report.type} for miner : ${minerId}`)
+    } else { // Failed
+      if (DEBUG) this.monitoring.debug(`Templates: the block has been ${report.report.type}, reason: ${report.report.reason} for miner : ${minerId}`)
+    } 
 
     this.templates.delete(hash)
     return report.report.type

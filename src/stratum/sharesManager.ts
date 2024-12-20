@@ -18,6 +18,7 @@ import {
 import { metrics } from '../../index';
 // Fix the import statement
 import Denque from 'denque';
+import { Encoding } from './templates/jobs/encoding';
 
 export interface WorkerStats {
   blocksFound: number;
@@ -98,7 +99,7 @@ export class SharesManager {
     }, interval);
   }
 
-  async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint, templates: any) {
+  async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint, templates: any, encoding: Encoding) {
     // Critical Section: Check and Add Share
     if (this.contributions.has(nonce)) {
       metrics.updateGaugeInc(minerDuplicatedShares, [minerId, address]);
@@ -160,7 +161,6 @@ export class SharesManager {
       if (DEBUG) this.monitoring.debug(`SharesManager: Stale header for miner ${minerId} and hash: ${hash}`);
       metrics.updateGaugeInc(minerStaleShares, [minerId, address]);
       // throw Error('Stale header');
-      console.log('Stale header')
       return
     }
 
@@ -178,7 +178,6 @@ export class SharesManager {
       metrics.updateGaugeInc(minerInvalidShares, [minerId, address]);
       // throw Error('Invalid share');
       minerData.workerStats.invalidShares++
-      console.log('Invalid target')
       return
     }
 
@@ -191,7 +190,7 @@ export class SharesManager {
     minerData.workerStats.varDiffSharesFound++;
     minerData.workerStats.lastShare = timestamp;
     minerData.workerStats.minDiff = currentDifficulty;
-    if (minerData.workerStats.workerName == "argonks5pro") {
+    if (encoding === Encoding.Bitmain) {
       minerData.workerStats.minDiff = 4096
     }
 

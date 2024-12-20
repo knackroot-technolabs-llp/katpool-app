@@ -45,7 +45,7 @@ export default class Stratum extends EventEmitter {
     const clampPow2 = config.stratum.varDiff.clampPow2 || true; // Enable clamping difficulty to powers of 2
     this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
 
-    this.extraNonceSize = Number(config.stratum.extraNonceSize) || 0;
+    this.extraNonceSize = Math.min(Number(config.stratum.extraNonceSize), 3 ) || 0;
     this.maxExtranonce = Math.pow(2, 8 * Math.min(this.extraNonceSize, 3)) - 1;
     this.nextExtranonce = 0;
   }
@@ -76,6 +76,9 @@ export default class Stratum extends EventEmitter {
   }
 
   reflectDifficulty(socket: Socket<Miner>) {
+    if (socket.data.encoding === Encoding.Bitmain) {
+      socket.data.difficulty = 4096
+    }
     const event: Event<'mining.set_difficulty'> = {
       method: 'mining.set_difficulty',
       params: [socket.data.difficulty]
@@ -169,7 +172,7 @@ export default class Stratum extends EventEmitter {
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
           break;
         }
-        case 'mining.submit': {
+        case 'mining.submit': {          
           const [address, name] = request.params[0].split('.');
           metrics.updateGaugeInc(minerjobSubmissions, [name, address]);
           if (DEBUG) this.monitoring.debug(`Stratum: Submitting job for Worker Name: ${name}`);
@@ -213,7 +216,7 @@ export default class Stratum extends EventEmitter {
               } else {
                 nonce = BigInt('0x' + request.params[2]);                
               }
-              this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, nonce, this.templates)
+              this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, nonce, this.templates, socket.data.encoding)
             }
             catch(err: any) {
               if (!(err instanceof Error)) throw err;

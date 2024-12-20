@@ -159,13 +159,13 @@ export default class Stratum extends EventEmitter {
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
           }  
           // Set extranonce
-          let extraNonceParams = socket.data.extraNonce
+          let extraNonceParams: any[] = [socket.data.extraNonce]
           if (socket.data.encoding === Encoding.Bitmain && socket.data.extraNonce != "") {
-            extraNonceParams = socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)
+            extraNonceParams = [socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)]
           }  
           const event: Event<'mining.set_extranonce'> = {
             method: 'mining.set_extranonce',
-            params: [ extraNonceParams],
+            params: extraNonceParams,
           }
           socket.write(JSON.stringify(event) + '\n');
           this.reflectDifficulty(socket);

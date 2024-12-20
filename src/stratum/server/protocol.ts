@@ -42,8 +42,7 @@ export const errors: { [key: string]: Error } = {
 }
 
 export interface EventMappings {
-  'set_extranonce': [ string ] // For IceRiver
-  'mining.set_extranonce': any[] // For Bitmain
+  'mining.set_extranonce': any[]
   'mining.set_difficulty': [ number ] // difficulty
   'mining.notify': [ string, string | bigint[], bigint? ] // jobid, bigpow && possibly timestamp on 4 u64 protocol
 }

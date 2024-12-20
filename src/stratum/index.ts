@@ -156,22 +156,15 @@ export default class Stratum extends EventEmitter {
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
           }  
           // Set extranonce
-          if(socket.data.encoding === Encoding.BigHeader) {
-            const event: Event<'set_extranonce'> = {
-              method: 'set_extranonce',
-              params: [randomBytes(4).toString('hex')],
-            }
-            socket.write(JSON.stringify(event) + '\n');
-          }
-          if (socket.data.extraNonce != "") {
-            if (socket.data.encoding === Encoding.Bitmain) {
-              const event: Event<'mining.set_extranonce'> = {
-                method: 'mining.set_extranonce',
-                params: [ socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)],
-              }
-              socket.write(JSON.stringify(event) + '\n');
-            }    
+          let extraNonceParams = socket.data.extraNonce
+          if (socket.data.encoding === Encoding.Bitmain && socket.data.extraNonce != "") {
+            extraNonceParams = socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)
           }  
+          const event: Event<'mining.set_extranonce'> = {
+            method: 'mining.set_extranonce',
+            params: [ extraNonceParams],
+          }
+          socket.write(JSON.stringify(event) + '\n');
           this.reflectDifficulty(socket);
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
           break;
@@ -205,7 +198,7 @@ export default class Stratum extends EventEmitter {
             if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
             // Add extranonce to noncestr if enabled and submitted nonce is shorter than
             // expected (16 - <extranonce length> characters)
-            if (socket.data.encoding == Encoding.Bitmain && socket.data.extraNonce !== "") {
+            if (socket.data.extraNonce !== "") {
               const extranonce2Len = 16 - socket.data.extraNonce.length;
 
               if (request.params[2].length <= extranonce2Len) {

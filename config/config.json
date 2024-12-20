@@ -11,11 +11,11 @@
   "stratum": {
     "port": 7777,
     "templates": {
-      "cacheSize": 300
+      "cacheSize": 30000
     },
     "difficulty": 4096,
     "sharesPerMinute": 20,
-    "extraNonceSize": 0, 
+    "extraNonceSize": 2, 
     "varDiff": {
       "varDiffStats": true,
       "clampPow2": true,

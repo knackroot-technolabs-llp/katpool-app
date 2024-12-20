@@ -4,6 +4,10 @@ Once the RPC connection is established, the pool initializes the treasury, which
 
 The shares are validated, and their difficulty is checked. Valid shares are counted, and blocks found are recorded. The pool uses this data to calculate the total hash rate and the contributions of each miner. Periodically, the pool distributes rewards based on each miner's contribution, allocating payments from the treasury and having them ready for the next payment cycle.
 
+## How the block templates are fetched
+
+We are fetching Block templates from GRPC endpoint. This is done through a Go-script. And this templates are passed on to a Redis channel.
+
 ## Download Kaspa WASM
 ** IMPORTANT **
 Before anything, add wasm foolder to the local folder
@@ -57,9 +61,15 @@ In `prometheus.yml` **update the targets**.
 
 Check `config/config.json` and do the required configurations to your pool.
 
-Here please prepend your own node. 
+* **block_wait_time_seconds**: time to wait since last new block message from kaspad before manually requesting a new block. 
 
-If it fails, you can update the code in `index.ts` as
+  * **Note**: It is to be set in **seconds**.
+
+* **extraNonceSize** The value should be between 0 to 3.
+
+* Here please prepend your own **node**. This has to be **GRPC endpoint**. 
+
+  * If it fails, you can update the code in `index.ts` as
 
 ```JS
 const rpc = new RpcClient({
@@ -100,6 +110,21 @@ To install dependencies:
 
 ```bash
 bun install
+```
+
+## How the go-script is run
+
+This go-script needs to be kept running along the pool.
+
+Build the binary 
+```
+cd katpool-app/go/
+go build .
+```
+
+Run the binary
+```
+./getNewBlockTemplate
 ```
 
 ## How the Database is setup

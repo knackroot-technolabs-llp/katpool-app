@@ -113,7 +113,8 @@ export default class Stratum extends EventEmitter {
 
           // Format extranonce as a hexadecimal string with padding
           if (this.extraNonceSize > 0) {
-            socket.data.extraNonce = lExtranonce.toString(16).padStart(this.extraNonceSize * 2, "0");
+            //socket.data.extraNonce = lExtranonce.toString(16).padStart(this.extraNonceSize * 2, "0");
+            socket.data.extraNonce = randomBytes(2).toString('hex')
           }   
           if (bitMainRegex.test(minerType)) {
             socket.data.encoding = Encoding.Bitmain;

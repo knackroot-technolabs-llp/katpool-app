@@ -18,6 +18,7 @@ import {
 import { metrics } from '../../index';
 // Fix the import statement
 import Denque from 'denque';
+import { Encoding } from './templates/jobs/encoding';
 
 export interface WorkerStats {
   blocksFound: number;
@@ -98,11 +99,13 @@ export class SharesManager {
     }, interval);
   }
 
-  async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint, templates: any) {
+  async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint, templates: any, encoding: Encoding) {
     // Critical Section: Check and Add Share
     if (this.contributions.has(nonce)) {
       metrics.updateGaugeInc(minerDuplicatedShares, [minerId, address]);
-      throw Error('Duplicate share');
+      // throw Error('Duplicate share');
+      console.log('Duplicate share for miner : ', minerId);
+      return
     } else {
       this.contributions.set(nonce, { address, difficulty, timestamp: Date.now(), minerId });
     }
@@ -138,26 +141,27 @@ export class SharesManager {
       };
       this.miners.set(address, minerData);
     } else {
-      // Atomically update worker stats
-      minerData.workerStats.sharesFound++;
-      minerData.workerStats.varDiffSharesFound++;
-      minerData.workerStats.lastShare = timestamp;
-      minerData.workerStats.minDiff = currentDifficulty;
+      // // Atomically update worker stats
+      // minerData.workerStats.sharesFound++;
+      // minerData.workerStats.varDiffSharesFound++;
+      // minerData.workerStats.lastShare = timestamp;
+      // minerData.workerStats.minDiff = currentDifficulty;
 
-      // Update recentShares with the new share
-      minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty });
+      // // Update recentShares with the new share
+      // minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty });
 
-      const windowSize = 10 * 60 * 1000; // 10 minutes window
-      while (minerData.workerStats.recentShares.length > 0 && Date.now() - minerData.workerStats.recentShares.peekFront()!.timestamp > windowSize) {
-        minerData.workerStats.recentShares.shift();
-      }
+      // const windowSize = 10 * 60 * 1000; // 10 minutes window
+      // while (minerData.workerStats.recentShares.length > 0 && Date.now() - minerData.workerStats.recentShares.peekFront()!.timestamp > windowSize) {
+      //   minerData.workerStats.recentShares.shift();
+      // }
     }
 
     const state = templates.getPoW(hash);
     if (!state) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Stale header for miner ${minerId} and hash: ${hash}`);
       metrics.updateGaugeInc(minerStaleShares, [minerId, address]);
-      throw Error('Stale header');
+      // throw Error('Stale header');
+      return
     }
 
     const [isBlock, target] = state.checkWork(nonce);
@@ -173,6 +177,7 @@ export class SharesManager {
       if (DEBUG) this.monitoring.debug(`SharesManager: Invalid share for target: ${target} for miner ${minerId}`);
       metrics.updateGaugeInc(minerInvalidShares, [minerId, address]);
       // throw Error('Invalid share');
+      minerData.workerStats.invalidShares++
       return
     }
 
@@ -181,6 +186,21 @@ export class SharesManager {
     const share = { minerId, address, difficulty, timestamp: Date.now() };
     this.shareWindow.push(share);
 
+    minerData.workerStats.sharesFound++;
+    minerData.workerStats.varDiffSharesFound++;
+    minerData.workerStats.lastShare = timestamp;
+    minerData.workerStats.minDiff = currentDifficulty;
+    if (encoding === Encoding.Bitmain) {
+      minerData.workerStats.minDiff = 4096
+    }
+
+    // Update recentShares with the new share
+    minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty });
+
+    const windowSize = 10 * 60 * 1000; // 10 minutes window
+    while (minerData.workerStats.recentShares.length > 0 && Date.now() - minerData.workerStats.recentShares.peekFront()!.timestamp > windowSize) {
+      minerData.workerStats.recentShares.shift();
+    }
     // Implement variable difficulty
     this.updateDifficulty(minerId);
   }

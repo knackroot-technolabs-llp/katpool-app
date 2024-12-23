@@ -14,6 +14,7 @@ import { Mutex } from 'async-mutex';
 import { metrics } from '../../index';
 import Denque from 'denque';
 import JsonBig from 'json-bigint';
+import config from "../../config/config.json";
 
 const bitMainRegex = new RegExp(".*(GodMiner).*", "i")
 
@@ -40,15 +41,11 @@ export default class Stratum extends EventEmitter {
     this.monitoring.log(`Stratum: Initialized with difficulty ${this.difficulty}`);
 
     // Start the VarDiff thread
-    const varDiffStats = true; // Enable logging of VarDiff stats
-    const clampPow2 = true; // Enable clamping difficulty to powers of 2
+    const varDiffStats = config.stratum.varDiff.varDiffStats || true; // Enable logging of VarDiff stats
+    const clampPow2 = config.stratum.varDiff.clampPow2 || true; // Enable clamping difficulty to powers of 2
     this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
 
-    if (!process.env.EXTRANONCE_SIZE) {
-      console.error("Extranonce size is not set in env.")
-      process.exit(1);
-    }
-    this.extraNonceSize = Number(process.env.EXTRANONCE_SIZE);
+    this.extraNonceSize = Math.min(Number(config.stratum.extraNonceSize), 3 ) || 0;
     this.maxExtranonce = Math.pow(2, 8 * Math.min(this.extraNonceSize, 3)) - 1;
     this.nextExtranonce = 0;
   }
@@ -79,6 +76,9 @@ export default class Stratum extends EventEmitter {
   }
 
   reflectDifficulty(socket: Socket<Miner>) {
+    if (socket.data.encoding === Encoding.Bitmain) {
+      socket.data.difficulty = 4096
+    }
     const event: Event<'mining.set_difficulty'> = {
       method: 'mining.set_difficulty',
       params: [socket.data.difficulty]
@@ -113,7 +113,8 @@ export default class Stratum extends EventEmitter {
 
           // Format extranonce as a hexadecimal string with padding
           if (this.extraNonceSize > 0) {
-            socket.data.extraNonce = lExtranonce.toString(16).padStart(this.extraNonceSize * 2, "0");
+            //socket.data.extraNonce = lExtranonce.toString(16).padStart(this.extraNonceSize * 2, "0");
+            socket.data.extraNonce = randomBytes(2).toString('hex')
           }   
           if (bitMainRegex.test(minerType)) {
             socket.data.encoding = Encoding.Bitmain;
@@ -159,24 +160,20 @@ export default class Stratum extends EventEmitter {
             this.sharesManager.getMiners().set(worker.address, existingMinerData!);
           }  
           // Set extranonce
-          if (socket.data.extraNonce != "") {
-            let params;
-            if (socket.data.encoding === Encoding.Bitmain) {
-                params = [ socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)]
-            } else {
-                params= [randomBytes(4).toString('hex')]
-            }     
-            const event : Event<'mining.set_extranonce'> = {
-              method: 'mining.set_extranonce',
-              params: params,
-            }       
-            socket.write(JSON.stringify(event) + '\n');
+          let extraNonceParams: any[] = [socket.data.extraNonce]
+          if (socket.data.encoding === Encoding.Bitmain && socket.data.extraNonce != "") {
+            extraNonceParams = [socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)]
           }  
+          const event: Event<'mining.set_extranonce'> = {
+            method: 'mining.set_extranonce',
+            params: extraNonceParams,
+          }
+          socket.write(JSON.stringify(event) + '\n');
           this.reflectDifficulty(socket);
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
           break;
         }
-        case 'mining.submit': {
+        case 'mining.submit': {          
           const [address, name] = request.params[0].split('.');
           metrics.updateGaugeInc(minerjobSubmissions, [name, address]);
           if (DEBUG) this.monitoring.debug(`Stratum: Submitting job for Worker Name: ${name}`);
@@ -205,7 +202,7 @@ export default class Stratum extends EventEmitter {
             if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
             // Add extranonce to noncestr if enabled and submitted nonce is shorter than
             // expected (16 - <extranonce length> characters)
-            if (socket.data.encoding == Encoding.Bitmain && socket.data.extraNonce !== "") {
+            if (socket.data.extraNonce !== "") {
               const extranonce2Len = 16 - socket.data.extraNonce.length;
 
               if (request.params[2].length <= extranonce2Len) {
@@ -220,7 +217,7 @@ export default class Stratum extends EventEmitter {
               } else {
                 nonce = BigInt('0x' + request.params[2]);                
               }
-              this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, nonce, this.templates)
+              this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, nonce, this.templates, socket.data.encoding)
             }
             catch(err: any) {
               if (!(err instanceof Error)) throw err;

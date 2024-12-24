@@ -16,10 +16,8 @@
     "difficulty": 256,
     "sharesPerMinute": 20,
     "extraNonceSize": 2, 
-    "varDiff": {
-      "varDiffStats": true,
-      "clampPow2": true
-    }
+    "clampPow2": true,
+    "varDiff": true
   },
   "treasury": {
     "fee": 5

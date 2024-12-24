@@ -376,7 +376,7 @@ export class SharesManager {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  startVardiffThread(expectedShareRate: number, logStats: boolean, clamp: boolean): void {
+  startVardiffThread(expectedShareRate: number, clamp: boolean): void {
     // 20 shares/min allows a ~99% confidence assumption of:
     //   < 100% variation after 1m
     //   < 50% variation after 3m
@@ -472,8 +472,8 @@ export class SharesManager {
       stats += statsLines + "\n"
       stats += `\n\n===============================================================================\n`
       stats += `\n${toleranceErrs}\n\n\n`
-      if (logStats) {
-        this.monitoring.log(stats)
+      if (DEBUG) {
+        this.monitoring.debug(stats)
       }
   
       // sh.statsLock.Unlock()

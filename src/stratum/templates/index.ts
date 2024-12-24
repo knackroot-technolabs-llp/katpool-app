@@ -64,7 +64,7 @@ export default class Templates {
     
     if (report.report.type == "success") {
       metrics.updateGaugeInc(paidBlocksGauge, [minerId, this.address]);
-      if (DEBUG) this.monitoring.debug(`Templates: the block by miner ${minerId} has been accepted`)
+      if (DEBUG) this.monitoring.debug(`Templates: the block by miner ${minerId} has been accepted with hash : ${newHash}`)
     } else { // Failed
       if (DEBUG) this.monitoring.debug(`Templates: the block by ${minerId} has been rejected, reason: ${report.report.reason}`)
     } 
@@ -82,7 +82,7 @@ export default class Templates {
       // })).block as IRawBlock;
 
     const templateChannel = config.redis_channel
-      this.subscriber.subscribe(templateChannel, (message) => {
+    this.subscriber.subscribe(templateChannel, (message) => {
       const fetchedTemplate = JSON.parse(message)
       const blockTemplate = {
         header: fetchedTemplate.Block.Header,

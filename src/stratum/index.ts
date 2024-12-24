@@ -68,17 +68,23 @@ export default class Stratum extends EventEmitter {
     this.subscriptors.forEach((socket) => {
       if (socket.readyState === "closed") {
         this.subscriptors.delete(socket);
-      } else {
-        this.reflectDifficulty(socket);
+      } else {      
+        socket.data.workers.forEach((worker, _) => {
+          var varDiff = this.sharesManager.getClientVardiff(worker)
+				  if (varDiff != socket.data.difficulty && varDiff != 0) {
+            this.monitoring.log(`Stratum: Updating VarDiff for ${worker.name} from ${socket.data.difficulty} to ${varDiff}`);
+            this.sharesManager.updateSocketDifficulty(worker.address, varDiff)
+            this.reflectDifficulty(socket)
+            this.sharesManager.startClientVardiff(worker)
+          }
+        });
+
         socket.write(tasksData[socket.data.encoding] + '\n');
       }
     });
   }
 
   reflectDifficulty(socket: Socket<Miner>) {
-    if (socket.data.encoding === Encoding.Bitmain) {
-      socket.data.difficulty = 4096
-    }
     const event: Event<'mining.set_difficulty'> = {
       method: 'mining.set_difficulty',
       params: [socket.data.difficulty]
@@ -134,6 +140,10 @@ export default class Stratum extends EventEmitter {
           socket.data.workers.set(worker.name, worker);
           sockets.add(socket);
 
+          if (socket.data.encoding === Encoding.Bitmain) {
+            this.difficulty = 4096
+            socket.data.difficulty = 4096
+          }
           if (!this.sharesManager.getMiners().has(worker.address)) {
             this.sharesManager.getMiners().set(worker.address, {
               sockets,

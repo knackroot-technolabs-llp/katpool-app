@@ -43,8 +43,7 @@ export default class Stratum extends EventEmitter {
     // Start the VarDiff thread
     const varDiffStats = config.stratum.varDiff.varDiffStats || true; // Enable logging of VarDiff stats
     const clampPow2 = config.stratum.varDiff.clampPow2 || true; // Enable clamping difficulty to powers of 2
-    // this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
-    this.sharesManager.startVardiffThreadGo(sharesPerMin, varDiffStats, clampPow2);
+    this.sharesManager.startVardiffThread(sharesPerMin, varDiffStats, clampPow2);
 
     this.extraNonceSize = Math.min(Number(config.stratum.extraNonceSize), 3 ) || 0;
     this.maxExtranonce = Math.pow(2, 8 * Math.min(this.extraNonceSize, 3)) - 1;
@@ -86,9 +85,6 @@ export default class Stratum extends EventEmitter {
   }
 
   reflectDifficulty(socket: Socket<Miner>) {
-    if (socket.data.encoding === Encoding.Bitmain) {
-      socket.data.difficulty = 4096
-    }
     const event: Event<'mining.set_difficulty'> = {
       method: 'mining.set_difficulty',
       params: [socket.data.difficulty]
@@ -144,6 +140,10 @@ export default class Stratum extends EventEmitter {
           socket.data.workers.set(worker.name, worker);
           sockets.add(socket);
 
+          if (socket.data.encoding === Encoding.Bitmain) {
+            this.difficulty = 4096
+            socket.data.difficulty = 4096
+          }
           if (!this.sharesManager.getMiners().has(worker.address)) {
             this.sharesManager.getMiners().set(worker.address, {
               sockets,

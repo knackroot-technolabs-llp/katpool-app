@@ -194,9 +194,6 @@ export class SharesManager {
     minerData.workerStats.varDiffSharesFound++;
     minerData.workerStats.lastShare = timestamp;
     minerData.workerStats.minDiff = currentDifficulty;
-    if (encoding === Encoding.Bitmain) {
-      minerData.workerStats.minDiff = 4096
-    }
 
     // Update recentShares with the new share
     minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty });
@@ -355,58 +352,6 @@ export class SharesManager {
     this.contributions.clear();
   }
 
-  startVardiffThread(sharesPerMin: number, varDiffStats: boolean, clampPow2: boolean) {
-    const intervalMs = 120000; // Run every 2 minutes
-    const minElapsedSeconds = 30; // Minimum 30 seconds between adjustments
-    const adjustmentFactor = 1.1; // 10% adjustment
-    const minDifficulty = 1; // Minimum difficulty
-
-    setInterval(() => {
-      const now = Date.now();
-
-      this.miners.forEach((minerData, address) => {
-        const stats = minerData.workerStats;
-        const elapsedSeconds = (now - stats.varDiffStartTime) / 1000;
-        if (elapsedSeconds < minElapsedSeconds) return;
-
-        const sharesFound = stats.varDiffSharesFound;
-        const shareRate = (sharesFound / elapsedSeconds) * 60; // Convert to per minute
-        const targetRate = sharesPerMin;
-
-        if (DEBUG) this.monitoring.debug(`SharesManager - VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsedSeconds: ${elapsedSeconds}, shareRate: ${shareRate}, targetRate: ${targetRate}, currentDiff: ${stats.minDiff}`);
-
-        let newDiff = stats.minDiff;
-
-        if (shareRate > targetRate * 1.2) {
-          newDiff = stats.minDiff * adjustmentFactor;
-        } else if (shareRate < targetRate * 0.8) {
-          newDiff = stats.minDiff / adjustmentFactor;
-        }
-
-        if (clampPow2) {
-          newDiff = Math.pow(2, Math.round(Math.log2(newDiff)));
-        }
-
-        newDiff = Math.max(newDiff, minDifficulty);
-
-        if (newDiff !== stats.minDiff) {
-          this.monitoring.debug(`SharesManager: VarDiff - Adjusting difficulty for ${stats.workerName} from ${stats.minDiff} to ${newDiff}`);
-          stats.minDiff = newDiff;
-          this.updateSocketDifficulty(address, newDiff);
-        } else {
-          this.monitoring.debug(`SharesManager: VarDiff - No change in difficulty for ${stats.workerName} (current difficulty: ${stats.minDiff})`);
-        }
-
-        stats.varDiffSharesFound = 0;
-        stats.varDiffStartTime = now;
-
-        if (varDiffStats) {
-          this.monitoring.log(`SharesManager: VarDiff for ${stats.workerName}: sharesFound: ${sharesFound}, elapsed: ${elapsedSeconds.toFixed(2)}, shareRate: ${shareRate.toFixed(2)}, newDiff: ${stats.minDiff}`);
-        }
-      });
-    }, intervalMs);
-  }
-
   updateSocketDifficulty(address: string, newDifficulty: number) {
     const minerData = this.miners.get(address);
     if (minerData) {
@@ -431,7 +376,7 @@ export class SharesManager {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  startVardiffThreadGo(expectedShareRate: number, logStats: boolean, clamp: boolean): void {
+  startVardiffThread(expectedShareRate: number, logStats: boolean, clamp: boolean): void {
     // 20 shares/min allows a ~99% confidence assumption of:
     //   < 100% variation after 1m
     //   < 50% variation after 3m
@@ -473,7 +418,7 @@ export class SharesManager {
         var window: number = windows[workerStats.varDiffWindow]
         var tolerance: number = tolerances[workerStats.varDiffWindow]
   
-        statsLines = statsLines.concat(statsLines, ` ${worker.padEnd(14)}| ${diff.toFixed(2).padStart(11)} | ${window.toString().padStart(8)} | ${duration.toFixed(2).padStart(10)} | ${shares.toString().padStart(11)} | ${shareRate.toFixed(2).padStart(9)}`)
+        statsLines = statsLines.concat(` ${worker.padEnd(14)}| ${diff.toFixed(2).padStart(11)} | ${window.toString().padStart(8)} | ${duration.toFixed(2).padStart(10)} | ${shares.toString().padStart(11)} | ${shareRate.toFixed(2).padStart(9)}\n`)
   
         // check final stage first, as this is where majority of time spent
         if (window == 0) {
@@ -562,7 +507,7 @@ export class SharesManager {
   }
 
   setClientVardiff(worker: Worker, minDiff: number): number {    
-    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.name)!);
+    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.address)!);
     // only called for initial diff setting, and clamping is handled during
     // config load
     var previousMinDiff = this.updateVarDiff(stats, minDiff, false)    
@@ -571,12 +516,12 @@ export class SharesManager {
   }
 
   startClientVardiff(worker: Worker) {
-    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.name)!);
+    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.address)!);
   	this.startVarDiff(stats)
   }
   
   getClientVardiff(worker: Worker): number {
-    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.name)!);
+    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.address)!);
     return stats.minDiff
   }
 }

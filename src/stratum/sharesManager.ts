@@ -458,15 +458,6 @@ export class SharesManager {
     return previousMinDiff
   }
 
-  setClientVardiff(worker: Worker, minDiff: number): number {    
-    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.address)!);
-    // only called for initial diff setting, and clamping is handled during
-    // config load
-    var previousMinDiff = this.updateVarDiff(stats, minDiff, false)    
-    this.startVarDiff(stats)    
-    return previousMinDiff
-  }
-
   startClientVardiff(worker: Worker) {
     const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.address)!);
   	this.startVarDiff(stats)

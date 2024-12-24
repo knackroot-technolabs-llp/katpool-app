@@ -13,13 +13,11 @@
     "templates": {
       "cacheSize": 30000
     },
-    "difficulty": 256,
+    "difficulty": 4096,
     "sharesPerMinute": 20,
     "extraNonceSize": 2, 
-    "varDiff": {
-      "varDiffStats": true,
-      "clampPow2": true
-    }
+    "clampPow2": true,
+    "varDiff": true
   },
   "treasury": {
     "fee": 5

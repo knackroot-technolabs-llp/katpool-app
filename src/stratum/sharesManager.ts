@@ -144,20 +144,6 @@ export class SharesManager {
         }
       };
       this.miners.set(address, minerData);
-    } else {
-      // // Atomically update worker stats
-      // minerData.workerStats.sharesFound++;
-      // minerData.workerStats.varDiffSharesFound++;
-      // minerData.workerStats.lastShare = timestamp;
-      // minerData.workerStats.minDiff = currentDifficulty;
-
-      // // Update recentShares with the new share
-      // minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty });
-
-      // const windowSize = 10 * 60 * 1000; // 10 minutes window
-      // while (minerData.workerStats.recentShares.length > 0 && Date.now() - minerData.workerStats.recentShares.peekFront()!.timestamp > windowSize) {
-      //   minerData.workerStats.recentShares.shift();
-      // }
     }
 
     const state = templates.getPoW(hash);
@@ -376,7 +362,7 @@ export class SharesManager {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  startVardiffThread(expectedShareRate: number, logStats: boolean, clamp: boolean): void {
+  startVardiffThread(expectedShareRate: number, clamp: boolean): void {
     // 20 shares/min allows a ~99% confidence assumption of:
     //   < 100% variation after 1m
     //   < 50% variation after 3m
@@ -472,8 +458,8 @@ export class SharesManager {
       stats += statsLines + "\n"
       stats += `\n\n===============================================================================\n`
       stats += `\n${toleranceErrs}\n\n\n`
-      if (logStats) {
-        this.monitoring.log(stats)
+      if (DEBUG) {
+        this.monitoring.debug(stats)
       }
   
       // sh.statsLock.Unlock()

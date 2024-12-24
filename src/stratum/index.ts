@@ -42,7 +42,7 @@ export default class Stratum extends EventEmitter {
 
     // Start the VarDiff thread
     const clampPow2 = config.stratum.clampPow2 || true; // Enable clamping difficulty to powers of 2
-    const varDiff = config.stratum.varDiff || true; // Enable variable difficulty
+    const varDiff = config.stratum.varDiff || false; // Enable variable difficulty
     if (varDiff)
       this.sharesManager.startVardiffThread(sharesPerMin, clampPow2);
 
@@ -141,10 +141,6 @@ export default class Stratum extends EventEmitter {
           socket.data.workers.set(worker.name, worker);
           sockets.add(socket);
 
-          if (socket.data.encoding === Encoding.Bitmain) {
-            this.difficulty = 4096
-            socket.data.difficulty = 4096
-          }
           if (!this.sharesManager.getMiners().has(worker.address)) {
             this.sharesManager.getMiners().set(worker.address, {
               sockets,
@@ -208,7 +204,7 @@ export default class Stratum extends EventEmitter {
             const minerData = this.sharesManager.getMiners().get(worker.address);
             const workerDiff = minerData?.workerStats.minDiff;
             const socketDiff = socket.data.difficulty;
-            if (DEBUG) this.monitoring.debug(`Stratum: Current difficulties - Worker: ${workerDiff}, Socket: ${socketDiff}`);
+            if (DEBUG) this.monitoring.debug(`Stratum: Current difficulties , Worker Name: ${minerId} - Worker: ${workerDiff}, Socket: ${socketDiff}`);
             const currentDifficulty = workerDiff || socketDiff;
             if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
             // Add extranonce to noncestr if enabled and submitted nonce is shorter than

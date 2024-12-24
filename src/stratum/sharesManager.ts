@@ -144,20 +144,6 @@ export class SharesManager {
         }
       };
       this.miners.set(address, minerData);
-    } else {
-      // // Atomically update worker stats
-      // minerData.workerStats.sharesFound++;
-      // minerData.workerStats.varDiffSharesFound++;
-      // minerData.workerStats.lastShare = timestamp;
-      // minerData.workerStats.minDiff = currentDifficulty;
-
-      // // Update recentShares with the new share
-      // minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty });
-
-      // const windowSize = 10 * 60 * 1000; // 10 minutes window
-      // while (minerData.workerStats.recentShares.length > 0 && Date.now() - minerData.workerStats.recentShares.peekFront()!.timestamp > windowSize) {
-      //   minerData.workerStats.recentShares.shift();
-      // }
     }
 
     const state = templates.getPoW(hash);

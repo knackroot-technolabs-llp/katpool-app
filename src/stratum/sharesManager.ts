@@ -470,7 +470,7 @@ export class SharesManager {
 
       statsLines.sort()
       stats += statsLines + "\n"
-      stats += `\n\n========================================================== katpool_app ===\n`
+      stats += `\n\n========================================================== katpool_app ======\n`
       stats += `\n${toleranceErrs}\n\n\n`
       if (logStats) {
         this.monitoring.log(stats)

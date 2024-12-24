@@ -105,10 +105,33 @@ Optionally, you can add a backup process to the DB. Check the ./backup folder.
 You can build the suggested image via `docker build -t katpool-backup:0.4 .` and uncomment its part in the docker-compose.yml file.
 We recommend to transfer the database dump files to other location as additional protection.
 
-For cloud backup get google credentials file from google cloud console 
-  - Add that json file to backup folder as "google-credentials.json"
-  - Configure the email address to access the dump file in config as "backupEmailAddress"
-Then execute the below commads:
+## Service Account Creation and Credentials for Google Cloud Backup
+
+### Creating project in google cloud console
+ - Head over and Login to https://console.cloud.google.com/ 
+ - Go to Topbar right beside the Google Cloud logo
+ - Create New Project
+ - Select your newly created project
+
+### Enabling drive api serivce
+ - From the navigation menu, select API & services (https://console.cloud.google.com/apis/dashboard)
+ - Click on ENABLE APIS AND SERVICES (https://console.cloud.google.com/apis/library)
+ - Go to the Google Workspace in sidebar
+ - Then click on Google Drive API (https://console.cloud.google.com/apis/library/drive.googleapis.com)
+ - Click on Enable button
+ 
+### Creating the google cloud service account 
+ - Go to (https://console.cloud.google.com/iam-admin/serviceaccounts)
+ - Click on CREATE SERVICE ACCOUNT, give the service account name, skip the optional fields
+
+### Creating credentials for the service account
+ - Go to your newly created service account 
+ - Go to KEYS tab and click on ADD KEY -> Create new key -> Key type : JSON
+ - Your credentials json file will be downloaded
+
+### Running cloud backup script
+ - Add that json file to backup folder as "google-credentials.json"
+ - Configure the email address to access the dump file in config as "backupEmailAddress" Then execute the below commads:
 ```bash
   cd backup/
   bun run cloudBackup.ts fileName.sql

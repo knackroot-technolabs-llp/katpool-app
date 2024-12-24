@@ -188,40 +188,6 @@ export class SharesManager {
     while (minerData.workerStats.recentShares.length > 0 && Date.now() - minerData.workerStats.recentShares.peekFront()!.timestamp > windowSize) {
       minerData.workerStats.recentShares.shift();
     }
-    // Implement variable difficulty
-    this.updateDifficulty(minerId);
-  }
-
-  private updateDifficulty(minerId: string): void {
-    const workerStats = this.miners.get(minerId)?.workerStats;
-    if (!workerStats) return;
-
-    const now = Date.now();
-    const elapsedMs = now - workerStats.varDiffStartTime;
-
-    if (elapsedMs >= 120000) { // 120000ms = 2 minutes
-      const shareRate = workerStats.varDiffSharesFound / (elapsedMs / 1000);
-      const targetShareRate = 60 / 60; // 60 shares per minute
-
-      let newDifficulty = workerStats.minDiff;
-
-      if (shareRate > targetShareRate * 1.1) {
-        newDifficulty *= 1.1;
-      } else if (shareRate < targetShareRate * 0.9) {
-        newDifficulty /= 1.1;
-      }
-
-      newDifficulty = Math.max(newDifficulty, 1);
-
-      if (newDifficulty !== workerStats.minDiff) {
-        workerStats.minDiff = newDifficulty;
-        this.monitoring.log(`SharesManager: Updated difficulty for ${minerId} to ${newDifficulty}`);
-        varDiff.labels(minerId).set(newDifficulty);
-      }
-
-      workerStats.varDiffStartTime = now;
-      workerStats.varDiffSharesFound = 0;
-    }
   }
 
   startStatsThread() {

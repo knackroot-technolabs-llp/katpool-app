@@ -231,58 +231,6 @@ export class SharesManager {
     }, 600000); // 10 minutes
   }
 
-  calcHashRates() {
-    let totalHashRate = 0;
-    const baseWindowSize = 10 * 60 * 1000; // 10 minutes base window
-    const now = Date.now();
-
-    this.miners.forEach((minerData, address) => {
-      try {
-        const workerStats = minerData.workerStats;
-        const recentShares = workerStats.recentShares.toArray();
-        
-        if (recentShares.length === 0) return;
-
-        // Adjust the window size dynamically based on miner's activity
-        const oldestShareTime = recentShares[0].timestamp;
-        const windowSize = Math.min(baseWindowSize, now - oldestShareTime);
-
-        // Filter relevant shares
-        const relevantShares = recentShares.filter(share => now - share.timestamp <= windowSize);
-
-        if (relevantShares.length === 0) return;
-
-        // Calculate weighted average difficulty
-        let totalWeightedDifficulty = 0;
-        let totalWeight = 0;
-        relevantShares.forEach((share, index) => {
-          const age = (now - share.timestamp) / windowSize;
-          const weight = Math.exp(-5 * age); // Exponential decay
-          totalWeightedDifficulty += share.difficulty * weight;
-          totalWeight += weight;
-        });
-
-        const avgDifficulty = totalWeightedDifficulty / totalWeight;
-        const timeDifference = (now - relevantShares[relevantShares.length - 1].timestamp) / 1000; // in seconds
-
-        const workerHashRate = (avgDifficulty * relevantShares.length) / timeDifference;
-        
-        metrics.updateGaugeValue(minerHashRateGauge, [workerStats.workerName, address], workerHashRate);
-        totalHashRate += workerHashRate;
-
-        // Update worker's hashrate in workerStats
-        workerStats.hashrate = workerHashRate;
-      } catch (error) {
-        this.monitoring.error(`Error calculating hashrate for miner ${address}: ${error}`);
-      }
-    });
-
-    metrics.updateGaugeValue(poolHashRateGauge, ['pool', this.poolAddress], totalHashRate);
-    if (DEBUG) {
-      this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${totalHashRate.toFixed(6)} GH/s`);
-    }
-  }
-
   getMiners() {
     return this.miners;
   }

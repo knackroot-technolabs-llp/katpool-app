@@ -69,7 +69,7 @@ export default class Templates {
       if (DEBUG) this.monitoring.debug(`Templates: the block by ${minerId} has been rejected, reason: ${report.report.reason}`)
     } 
 
-    this.templates.delete(hash)
+    // this.templates.delete(hash)
     return report.report.type
   }
 

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events'
 import Monitoring from '../monitoring';
 import { PrivateKey, UtxoProcessor, UtxoContext, type RpcClient } from "../../wasm/kaspa"
+import JsonBig from 'json-bigint';
 
 const startTime = BigInt(Date.now())
 
@@ -40,22 +41,28 @@ export default class Treasury extends EventEmitter {
     })
 
     this.processor.addEventListener('maturity', async (e) => {
-      // @ts-ignore
-      if (!e?.data?.data?.utxoEntries?.some(element => element?.isCoinbase)) return
+      this.monitoring.log(`Maturity event data : ${JsonBig.stringify(e)}`)
+      if (e?.data?.type === 'incoming') {
+        // @ts-ignore
+        if (!e?.data?.data?.utxoEntries?.some(element => element?.isCoinbase)) {
+          this.monitoring.log(`Not coinbase event. Skipping`)
+          return
+        }
+        const { timestamps } = await this.rpc.getDaaScoreTimestampEstimate({
+          daaScores: [e.data.blockDaaScore]
+        })
+        if (timestamps[0] < startTime) {
+          this.monitoring.log(`Earlier event detected. Skipping`)
+          return
+        }
 
-      const { timestamps } = await this.rpc.getDaaScoreTimestampEstimate({
-        daaScores: [ e.data.blockDaaScore ]
-      })
-      if (timestamps[0] < startTime) {
-        return
+        // @ts-ignore
+        const reward = e.data.value
+        this.monitoring.log(`Treasury: Maturity event received. Reward: ${reward}, Event timestamp: ${Date.now()}`);
+        const poolFee = (reward * BigInt(this.fee * 100)) / 10000n
+        this.monitoring.log(`Treasury: Pool fees to retain on the coinbase cycle: ${poolFee}.`);
+        this.emit('coinbase', reward - poolFee, poolFee)
       }
-
-      // @ts-ignore
-      const reward = e.data.value
-      this.monitoring.log(`Treasury: Maturity event received. Reward: ${reward}, Event timestamp: ${Date.now()}`);
-      const poolFee = (reward * BigInt(this.fee * 100)) / 10000n
-      this.monitoring.log(`Treasury: Pool fees to retain on the coinbase cycle: ${poolFee}.`);
-      this.emit('coinbase', reward - poolFee, poolFee)
     })
 
     this.processor.start()

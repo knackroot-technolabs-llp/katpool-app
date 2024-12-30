@@ -54,7 +54,7 @@ dotenv.config();
 monitoring.log(`Main: network: ${config.network}`);
 
 const rpc = new RpcClient({
-  url: "localhost:17210", // This is WRPC end point
+  url: config.node[0], // This is WRPC end point
   // resolver: new Resolver(
   //   {
   //     urls : ["http://localhost:16210/"],

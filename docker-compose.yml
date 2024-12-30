@@ -32,6 +32,8 @@ services:
   #     - "18110:18110/tcp" # wRPC (json)
   #   volumes:
   #     - ./kaspad_mainnet:/app/data/
+  #   networks:
+  #     - backend
 
   kaspad_testnet10: # REGULAR TESTNET
     container_name: kaspad_testnet10
@@ -44,6 +46,8 @@ services:
       - "18210:18210/tcp" # wRPC (json)
     volumes:
       - ./kaspad_testnet10:/app/data/
+    networks:
+      - backend
     command: kaspad --yes --nologfiles --disable-upnp --utxoindex --testnet --rpclisten=0.0.0.0:16210 --rpclisten-borsh=0.0.0.0:17210 --rpclisten-json=0.0.0.0:18210
 
   # kaspad_testnet11: # 10BPS TESTNET
@@ -57,6 +61,8 @@ services:
   #     - "18310:18310/tcp" # wRPC (json)
   #   volumes:
   #     - ./kaspad_testnet11:/app/data/
+  #   networks:
+  #     - backend
   #   command: kaspad --yes --nologfiles --disable-upnp --utxoindex --testnet --netsuffix=11 --rpclisten=0.0.0.0:16310 --rpclisten-borsh=0.0.0.0:17310 --rpclisten-json=0.0.0.0:18310
 
   go-app:

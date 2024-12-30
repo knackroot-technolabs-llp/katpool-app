@@ -21,8 +21,8 @@ services:
     networks:
       - backend
 
-  # kaspad_mainnet:
-  #   container_name: kaspad_mainnet
+  # kaspad-mainnet:
+  #   container_name: kaspad-mainnet
   #   image: supertypo/rusty-kaspad:v0.15.2
   #   restart: unless-stopped
   #   ports:
@@ -31,12 +31,12 @@ services:
   #     - "17110:17110/tcp" # wRPC (borsh)
   #     - "18110:18110/tcp" # wRPC (json)
   #   volumes:
-  #     - ./kaspad_mainnet:/app/data/
+  #     - /root/kaspad_mainnet:/app/data/
   #   networks:
   #     - backend
 
-  kaspad_testnet10: # REGULAR TESTNET
-    container_name: kaspad_testnet10
+  kaspad-testnet10: # REGULAR TESTNET
+    container_name: kaspad-testnet10
     image: supertypo/rusty-kaspad:v0.15.2
     restart: unless-stopped
     ports:
@@ -45,13 +45,13 @@ services:
       - "17210:17210/tcp" # wRPC (borsh)
       - "18210:18210/tcp" # wRPC (json)
     volumes:
-      - ./kaspad_testnet10:/app/data/
+      - /root/kaspad_testnet10:/app/data/
     networks:
       - backend
     command: kaspad --yes --nologfiles --disable-upnp --utxoindex --testnet --rpclisten=0.0.0.0:16210 --rpclisten-borsh=0.0.0.0:17210 --rpclisten-json=0.0.0.0:18210
 
-  # kaspad_testnet11: # 10BPS TESTNET
-  #   container_name: kaspad_testnet11
+  # kaspad-testnet11: # 10BPS TESTNET
+  #   container_name: kaspad-testnet11
   #   image: supertypo/rusty-kaspad:tn11
   #   restart: unless-stopped
   #   ports:
@@ -60,7 +60,7 @@ services:
   #     - "17310:17310/tcp" # wRPC (borsh)
   #     - "18310:18310/tcp" # wRPC (json)
   #   volumes:
-  #     - ./kaspad_testnet11:/app/data/
+  #     - /root/kaspad_testnet11:/app/data/
   #   networks:
   #     - backend
   #   command: kaspad --yes --nologfiles --disable-upnp --utxoindex --testnet --netsuffix=11 --rpclisten=0.0.0.0:16310 --rpclisten-borsh=0.0.0.0:17310 --rpclisten-json=0.0.0.0:18310
@@ -73,7 +73,7 @@ services:
       - .env
     depends_on:
       - redis
-      - kaspad_testnet10
+      - kaspad-testnet10
     volumes:
       - ./config:/app/config
     networks:

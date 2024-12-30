@@ -1,5 +1,5 @@
 # Use the official Node.js image as the base image
-FROM node:20.18.0
+FROM node:20
 
 # Install Bun
 RUN curl -fsSL https://bun.sh/install | bash

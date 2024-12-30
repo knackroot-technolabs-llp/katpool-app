@@ -12,12 +12,74 @@ services:
       - .env
     restart: always
 
+  # Redis service
+  redis:
+    image: redis:latest
+    container_name: redis
+    # ports:
+    #   - "6379:6379"  # Expose Redis port for external access (optional)
+    networks:
+      - backend
+
+  # kaspad_mainnet:
+  #   container_name: kaspad_mainnet
+  #   image: supertypo/rusty-kaspad:latest
+  #   restart: unless-stopped
+  #   ports:
+  #     - "16111:16111/tcp"
+  #     - "16110:16110/tcp" # gRPC
+  #     - "17110:17110/tcp" # wRPC (borsh)
+  #     - "18110:18110/tcp" # wRPC (json)
+  #   volumes:
+  #     - ./kaspad_mainnet:/app/data/
+
+  kaspad_testnet10: # REGULAR TESTNET
+    container_name: kaspad_testnet10
+    image: supertypo/rusty-kaspad:latest
+    restart: unless-stopped
+    ports:
+      - "16211:16211/tcp"
+      - "16210:16210/tcp" # gRPC
+      - "17210:17210/tcp" # wRPC (borsh)
+      - "18210:18210/tcp" # wRPC (json)
+    volumes:
+      - ./kaspad_testnet10:/app/data/
+    command: kaspad --yes --nologfiles --disable-upnp --utxoindex --testnet --rpclisten=0.0.0.0:16210 --rpclisten-borsh=0.0.0.0:17210 --rpclisten-json=0.0.0.0:18210
+
+  # kaspad_testnet11: # 10BPS TESTNET
+  #   container_name: kaspad_testnet11
+  #   image: supertypo/rusty-kaspad:tn11
+  #   restart: unless-stopped
+  #   ports:
+  #     - "16311:16311/tcp"
+  #     - "16310:16310/tcp" # gRPC
+  #     - "17310:17310/tcp" # wRPC (borsh)
+  #     - "18310:18310/tcp" # wRPC (json)
+  #   volumes:
+  #     - ./kaspad_testnet11:/app/data/
+  #   command: kaspad --yes --nologfiles --disable-upnp --utxoindex --testnet --netsuffix=11 --rpclisten=0.0.0.0:16310 --rpclisten-borsh=0.0.0.0:17310 --rpclisten-json=0.0.0.0:18310
+
+  go-app:
+    image: ghcr.io/knackroot-technolabs-llp/katpool-blocktemplate-fetcher:latest  # Build the Go app from the ./app directory
+    container_name: go-app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - kaspad_testnet10
+    volumes:
+      - ./config:/app/config
+    networks:
+      - backend
+    restart: always
+
   katpool-app:
-    image: ghcr.io/argonmining/katpool-app:v2408.1b-main
+    image: ghcr.io/knackroot-technolabs-llp/katpool-app:latest
     pull_policy: always
     container_name: katpool-app
     depends_on:
       - postgres
+      - redis
       - katpool-monitor
       - pushgateway
     ports:
@@ -32,7 +94,7 @@ services:
     restart: always
 
   katpool-monitor:
-    image: ghcr.io/argonmining/katpool-monitor:v2408.1b-main
+    image: ghcr.io/knackroot-technolabs-llp/katpool-monitor:latest
     pull_policy: always
     container_name: katpool-monitor
     depends_on:
@@ -47,7 +109,7 @@ services:
     restart: always
 
   katpool-payment:
-    image: ghcr.io/argonmining/katpool-payment:v2408.1b-main
+    image: ghcr.io/knackroot-technolabs-llp/katpool-payment:latest
     pull_policy: always
     container_name: katpool-payment
     depends_on:
@@ -68,7 +130,6 @@ services:
       - postgres
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./prometheus_data:/prometheus
     networks:
       - backend
     command:
@@ -96,6 +157,7 @@ services:
       - prometheus
       - katpool-monitor
     restart: always
+
   # postgres-backup:
   #   image: katpool-backup:0.4
   #   container_name: katpool-backup

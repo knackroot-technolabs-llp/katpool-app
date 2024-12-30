@@ -23,7 +23,7 @@ services:
 
   # kaspad_mainnet:
   #   container_name: kaspad_mainnet
-  #   image: supertypo/rusty-kaspad:latest
+  #   image: supertypo/rusty-kaspad:v0.15.2
   #   restart: unless-stopped
   #   ports:
   #     - "16111:16111/tcp"
@@ -35,7 +35,7 @@ services:
 
   kaspad_testnet10: # REGULAR TESTNET
     container_name: kaspad_testnet10
-    image: supertypo/rusty-kaspad:latest
+    image: supertypo/rusty-kaspad:v0.15.2
     restart: unless-stopped
     ports:
       - "16211:16211/tcp"
@@ -61,6 +61,7 @@ services:
 
   go-app:
     image: ghcr.io/knackroot-technolabs-llp/katpool-blocktemplate-fetcher:latest  # Build the Go app from the ./app directory
+    pull_policy: always
     container_name: go-app
     env_file:
       - .env

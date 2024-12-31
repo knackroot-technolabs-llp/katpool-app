@@ -16,13 +16,11 @@ services:
   redis:
     image: redis:latest
     container_name: redis
-    # ports:
-    #   - "6379:6379"  # Expose Redis port for external access (optional)
     networks:
       - backend
 
-  # kaspad-mainnet:
-  #   container_name: kaspad-mainnet
+  # kaspad:
+  #   container_name: kaspad
   #   image: supertypo/rusty-kaspad:v0.15.2
   #   restart: unless-stopped
   #   ports:
@@ -35,8 +33,8 @@ services:
   #   networks:
   #     - backend
 
-  kaspad-testnet10: # REGULAR TESTNET
-    container_name: kaspad-testnet10
+  kaspad: # REGULAR TESTNET
+    container_name: kaspad
     image: supertypo/rusty-kaspad:v0.15.2
     restart: unless-stopped
     ports:
@@ -50,8 +48,8 @@ services:
       - backend
     command: kaspad --yes --nologfiles --disable-upnp --utxoindex --testnet --rpclisten=0.0.0.0:16210 --rpclisten-borsh=0.0.0.0:17210 --rpclisten-json=0.0.0.0:18210
 
-  # kaspad-testnet11: # 10BPS TESTNET
-  #   container_name: kaspad-testnet11
+  # kaspad: # 10BPS TESTNET
+  #   container_name: kaspad
   #   image: supertypo/rusty-kaspad:tn11
   #   restart: unless-stopped
   #   ports:
@@ -73,7 +71,7 @@ services:
       - .env
     depends_on:
       - redis
-      - kaspad-testnet10
+      - kaspad
     volumes:
       - ./config:/app/config
     networks:
@@ -90,7 +88,7 @@ services:
       - katpool-monitor
       - pushgateway
     ports:
-      - "7777:7777"
+      - "8888:7777"
     networks:
       - backend
     volumes:

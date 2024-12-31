@@ -20,7 +20,7 @@
     "varDiff": true
   },
   "treasury": {
-    "fee": 5
+    "fee": 0
   },
   "payoutsPerDay": 2,
   "thresholdAmount": "5000000000",

@@ -119,6 +119,6 @@ export default class Pool {
     }
 
     // Handle pool fee revenue
-    if (works.size > 0) this.revenuize(poolFee);
+    if (works.size > 0 && poolFee > 0) this.revenuize(poolFee);
   }
 }

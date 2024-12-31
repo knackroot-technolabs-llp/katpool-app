@@ -34,11 +34,11 @@ export default class Pool {
     this.stratum.on('subscription', (ip: string, agent: string) => this.monitoring.log(`Pool: Miner ${ip} subscribed into notifications with ${agent}.`));
     this.treasury.on('coinbase', (minerReward: bigint, poolFee: bigint) => {
       const currentTimestamp = Date.now();
-      if (currentTimestamp - this.lastProcessedTimestamp < 1000) { // 1 second cooldown
-        this.duplicateEventCount++;
-        this.monitoring.debug(`Pool: Skipping duplicate coinbase event. Last processed: ${this.lastProcessedTimestamp}, Current: ${currentTimestamp}, Duplicate count: ${this.duplicateEventCount}`);
-        return;
-      }
+      // if (currentTimestamp - this.lastProcessedTimestamp < 1000) { // 1 second cooldown
+      //   this.duplicateEventCount++;
+      //   this.monitoring.debug(`Pool: Skipping duplicate coinbase event. Last processed: ${this.lastProcessedTimestamp}, Current: ${currentTimestamp}, Duplicate count: ${this.duplicateEventCount}`);
+      //   return;
+      // }
       this.lastProcessedTimestamp = currentTimestamp;
       this.duplicateEventCount = 0;
       this.monitoring.log(`Pool: Processing coinbase event. Timestamp: ${currentTimestamp}`);
@@ -119,6 +119,6 @@ export default class Pool {
     }
 
     // Handle pool fee revenue
-    if (works.size > 0) this.revenuize(poolFee);
+    if (works.size > 0 && poolFee > 0) this.revenuize(poolFee);
   }
 }

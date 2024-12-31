@@ -1,17 +1,17 @@
 {
-  "node" : ["localhost:36210","https://us-east.nachowyborski.xyz/", "https://us-west.nachowyborski.xyz/", "https://de.nachowyborksi.xyz/", "https://turkey.nachowyborski.xyz/", "https://india.nachowyborski.xyz/", "https://singapore.nachowyborski.xyz/", "https://brazil.nachowyborski.xyz/", "https://italy.nachowyborski.xyz/"],
+  "node" : ["https://us-east.nachowyborski.xyz/", "https://us-west.nachowyborski.xyz/", "https://de.nachowyborksi.xyz/", "https://turkey.nachowyborski.xyz/", "https://india.nachowyborski.xyz/", "https://singapore.nachowyborski.xyz/", "https://brazil.nachowyborski.xyz/", "https://italy.nachowyborski.xyz/"],
   "network" : "mainnet",
   "paymentInterval": 1,
   "pool_id" : "us-katpool1",
   "location" : "us-east",
   "hostname" : "katpool.nachowyborski.xyz",  
   "block_wait_time_seconds": "3",
-  "redis_address" : "localhost:6379",
+  "redis_address" : "redis:6379",
   "redis_channel": "NewBlockTemplateChannel",
   "stratum": {
     "port": 7777,
     "templates": {
-      "cacheSize": 30000
+      "cacheSize": 300
     },
     "difficulty": 4096,
     "sharesPerMinute": 20,
@@ -20,7 +20,9 @@
     "varDiff": true
   },
   "treasury": {
-    "fee": 5
+    "fee": 0
   },
+  "payoutsPerDay": 2,
+  "thresholdAmount": "5000000000",
   "backupEmailAddress": ""
 }

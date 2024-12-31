@@ -53,8 +53,18 @@ dotenv.config();
 
 monitoring.log(`Main: network: ${config.network}`);
 
+let rpcUrl = "kaspad:17110"
+
+if( config.network === "testnet-10" ) {
+  rpcUrl = "kaspad:17210"
+} else if( config.network === "testnet-11" ) {
+  rpcUrl = "kaspad:17310"
+}
+
+monitoring.log(`Main: rpc url: ${rpcUrl}`);
+
 const rpc = new RpcClient({
-  url: "localhost:17210", // This is WRPC end point
+  url: rpcUrl, // This is WRPC end point
   // resolver: new Resolver(
   //   {
   //     urls : ["http://localhost:16210/"],
@@ -64,10 +74,10 @@ const rpc = new RpcClient({
   networkId: config.network,
 });
 
-try{
+try{  
   await rpc.connect();
 } catch(err) {
-  monitoring.error(`Error while connecting to rpc url : ${rpc.url}`)
+  monitoring.error(`Error while connecting to rpc url : ${rpc.url} Error: ${err}`)
 }
 
 monitoring.log(`Main: RPC connection started`)

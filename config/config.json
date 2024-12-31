@@ -1,6 +1,6 @@
 {
-  "node" : ["kaspad:17210","https://us-east.nachowyborski.xyz/", "https://us-west.nachowyborski.xyz/", "https://de.nachowyborksi.xyz/", "https://turkey.nachowyborski.xyz/", "https://india.nachowyborski.xyz/", "https://singapore.nachowyborski.xyz/", "https://brazil.nachowyborski.xyz/", "https://italy.nachowyborski.xyz/"],
-  "network" : "testnet-10",
+  "node" : ["https://us-east.nachowyborski.xyz/", "https://us-west.nachowyborski.xyz/", "https://de.nachowyborksi.xyz/", "https://turkey.nachowyborski.xyz/", "https://india.nachowyborski.xyz/", "https://singapore.nachowyborski.xyz/", "https://brazil.nachowyborski.xyz/", "https://italy.nachowyborski.xyz/"],
+  "network" : "mainnet",
   "paymentInterval": 1,
   "pool_id" : "us-katpool1",
   "location" : "us-east",
@@ -22,5 +22,7 @@
   "treasury": {
     "fee": 5
   },
+  "payoutsPerDay": 2,
+  "thresholdAmount": "5000000000",
   "backupEmailAddress": ""
 }

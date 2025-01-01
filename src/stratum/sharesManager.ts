@@ -111,7 +111,7 @@ export class SharesManager {
     let minerData = this.miners.get(address);
     const currentDifficulty = minerData ? minerData.workerStats.minDiff : difficulty;
 
-    metrics.updateGaugeInc(minerAddedShares, [minerId, address]);
+    metrics.updateGaugeInc(minerAddedShares, [minerId, address, (Date.now()).toString()]);
 
     if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - Nonce: ${nonce} - Hash: ${hash}`);
 

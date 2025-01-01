@@ -31,7 +31,7 @@ export const minerjobSubmissions = new Gauge({
 export const minerAddedShares = new Gauge({
   name: 'added_miner_shares_1min_count',
   help: 'Added shares per miner',
-  labelNames: ['miner_id', 'wallet_address']
+  labelNames: ['miner_id', 'wallet_address', 'timestamp']
 });
 
 export const minerInvalidShares = new Gauge({

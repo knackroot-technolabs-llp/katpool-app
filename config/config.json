@@ -23,6 +23,6 @@
     "fee": 0
   },
   "payoutsPerDay": 2,
-  "thresholdAmount": "5000000000",
+  "thresholdAmount": "500000000",
   "backupEmailAddress": ""
 }

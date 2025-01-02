@@ -131,6 +131,7 @@ services:
 
   prometheus:
     image: prom/prometheus
+    user: root
     container_name: katpool-prmths
     depends_on:
       - postgres

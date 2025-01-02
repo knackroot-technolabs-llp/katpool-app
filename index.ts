@@ -62,6 +62,7 @@ if( config.network === "testnet-10" ) {
 }
 
 monitoring.log(`Main: rpc url: ${rpcUrl}`);
+monitoring.log(`Workflow test log added`);
 
 const rpc = new RpcClient({
   url: rpcUrl, // This is WRPC end point

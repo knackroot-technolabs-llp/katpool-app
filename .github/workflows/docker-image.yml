@@ -34,7 +34,7 @@ jobs:
         run: docker --version
 
       - name: Docker Login
-        run: docker login ${{ env.REGISTRY }} --username kr-kashyap --password-stdin -p ${{ secrets.GB_KATPOOL_TOKEN }}
+        run: docker login ${{ env.REGISTRY }} --username kr-kashyap -p ${{ secrets.GB_KATPOOL_TOKEN }}
 
       - name: Docker Build
         env:

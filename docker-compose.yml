@@ -136,6 +136,7 @@ services:
       - postgres
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - /root/docker_deployment/prometheus_data:/prometheus
     networks:
       - backend
     command:

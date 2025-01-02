@@ -33,8 +33,6 @@ Before proceeding, ensure you have the following installed:
 
 4. **Download Kaspa WASM**:
    - **IMPORTANT**: Download the latest WASM from [Kaspa Aspectron Nightly Builds](https://kaspa.aspectron.org/nightly/downloads/).
-   - Unzip the downloaded file and move the `nodejs` folder to the `wasm` directory in the project repository. Rename it to match the structure expected by the code (e.g., `kaspa` and `kaspa-dev`).
-   - Validate the location by checking the imports in the code.
 
 5. **GitHub Personal Access Token**:
    - Create a Personal Access Token following [GitHub's Guide](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token).
@@ -54,8 +52,8 @@ cd <project-directory>
 ```
 Replace `<repository-url>` with the actual repository URL.
 
-- Move the `nodejs` folder (from the WASM download) into the `wasm` directory in the repository.
-- Validate the folder structure to ensure compatibility with code imports.
+   - Unzip the downloaded Kaspa WASM file and move the `nodejs` folder to the project repository. Rename it as `wasm` to match the structure expected by the code.
+   - Validate the location by checking the imports in the code.
 
 ### 2. Review the Docker Compose File
 

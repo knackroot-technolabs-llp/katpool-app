@@ -15,5 +15,6 @@ CREATE TABLE IF NOT EXISTS payments (
     wallet_address TEXT[] NOT NULL,
     amount BIGINT NOT NULL,
     timestamp TIMESTAMP DEFAULT NOW(),
-    transaction_hash VARCHAR(255) NOT NULL
+    transaction_hash VARCHAR(255) NOT NULL,
+    usd_value NUMERIC NOT NULL
 );

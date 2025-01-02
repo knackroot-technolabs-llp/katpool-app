@@ -24,7 +24,7 @@ jobs:
       - name: Debug Secrets and Env Vars
         run: |
           echo "Registry: ${{ env.REGISTRY }}"
-          echo "Token Length: ${#${{ secrets.GB_KATPOOL_TOKEN }}}"
+          echo "Token Length: ${{ secrets.GB_KATPOOL_TOKEN }}"
 
       - name: Docker Login
         run: echo "${{ secrets.GB_KATPOOL_TOKEN }}" | docker login ${{ env.REGISTRY }} --username kr-kashyap --password-stdin

@@ -24,10 +24,17 @@ jobs:
       - name: Debug Secrets and Env Vars
         run: |
           echo "Registry: ${{ env.REGISTRY }}"
-          echo "Token Length: ${{ secrets.GB_KATPOOL_TOKEN }}"
+          echo "Token Length: ${#${{ secrets.GB_KATPOOL_TOKEN }}}"
+      
+      - name: Enable Debug Logging
+        run: |
+          echo "DEBUG=true" >> $GITHUB_ENV
+
+      - name: Check Docker
+        run: docker --version
 
       - name: Docker Login
-        run: echo "${{ secrets.GB_KATPOOL_TOKEN }}" | docker login ${{ env.REGISTRY }} --username kr-kashyap --password-stdin
+        run: docker login ${{ env.REGISTRY }} --username kr-kashyap --password-stdin -p ${{ secrets.GB_KATPOOL_TOKEN }}
 
       - name: Docker Build
         env:

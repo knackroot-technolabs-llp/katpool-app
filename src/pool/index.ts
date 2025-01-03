@@ -118,11 +118,9 @@ export default class Pool {
       const response = await axios.get(`${KASPA_BASE_URL}/transactions/${txnId}?inputs=false&outputs=false&resolve_previous_outpoints=no`, {
         timeout: 5000, // Timeout for safety
       });
-      if (response.status !== 200) {
+      
+      if (response?.status !== 200 && !response?.data) {
         this.monitoring.error(`Unexpected status code: ${response.status}`);
-      }
-
-      if (!response.data) {
         this.monitoring.error(`Invalid or missing block hash in response data for transaction ${txnId}`);
       } else {
         block_hash = response.data.block_hash[0]

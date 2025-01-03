@@ -152,7 +152,7 @@ export default class Pool {
 
   handleError(error: unknown, context: string): void {
     if (error instanceof AxiosError) {
-      this.monitoring.error(`API call failed: ${error.message}`);
+      this.monitoring.error(`API call failed: ${error.message} .\n${context}`);
       if (error.response) {
         this.monitoring.error(`Response status: ${error.response.status}`);
         if (DEBUG) this.monitoring.error(`Response data: ${JSON.stringify(error.response.data)}`);

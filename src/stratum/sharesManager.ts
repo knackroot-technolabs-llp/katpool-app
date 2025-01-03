@@ -164,7 +164,7 @@ export class SharesManager {
       return
     }
 
-    if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block added from: ${minerId} with address ${address} for nonce: ${nonce}`);
+    if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block share added from: ${minerId} with address ${address} for nonce: ${nonce}`);
 
     const share = { minerId, address, difficulty, timestamp: Date.now() };
     this.shareWindow.push(share);

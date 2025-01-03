@@ -3,7 +3,7 @@ import { calculateTarget } from "../../wasm/kaspa";
 import { Pushgateway } from 'prom-client';
 import { type Worker } from './server';
 import type { RegistryContentType } from 'prom-client';
-import { stringifyHashrate, getAverageHashrateGHs, getAvgHashRateWorkerWise } from './utils';
+import { stringifyHashrate, getAvgHashRateWorkerWise } from './utils';
 import Monitoring from '../monitoring';
 import { DEBUG } from '../../index';
 import {
@@ -196,7 +196,12 @@ export class SharesManager {
 
       this.miners.forEach((minerData, address) => {
         const stats = minerData.workerStats;
-        const rate = getAverageHashrateGHs(stats);
+        let rate = 0
+        const workerWiseHashRate = getAvgHashRateWorkerWise(stats)
+        workerWiseHashRate.forEach((workerRate, workerName) =>{
+          rate += workerRate
+          metrics.updateGaugeValue(workerHashRateGauge, [workerName, address], workerRate);
+        })
         totalRate += rate;
         const rateStr = stringifyHashrate(rate);
         const ratioStr = `${stats.sharesFound}/${stats.staleShares}/${stats.invalidShares}`;
@@ -204,11 +209,6 @@ export class SharesManager {
           ` ${stats.workerName.padEnd(15)}| ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${stats.blocksFound.toString().padEnd(12)} | ${(Date.now() - stats.startTime) / 1000}s`
         );
         metrics.updateGaugeValue(minerHashRateGauge, [stats.workerName, address], rate);
-
-        const workerWiseHashRate = getAvgHashRateWorkerWise(stats)
-        workerWiseHashRate.forEach((rate, workerName) =>{
-          metrics.updateGaugeValue(workerHashRateGauge, [workerName, address], rate);
-        })
 
         // Update worker's hashrate in workerStats
         stats.hashrate = rate;  

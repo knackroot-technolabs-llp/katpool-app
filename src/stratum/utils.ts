@@ -20,20 +20,6 @@ export function stringifyHashrate(ghs: number): string {
   return `${hr.toFixed(2)}${unit}H/s`;
 }
 
-export function getAverageHashrateGHs(stats: WorkerStats): number {
-  const windowSize = 10 * 60 * 1000; // 10 minutes window
-  const relevantShares: { timestamp: number, difficulty: number, workerName: string }[] = [];
-
-  // Use Denque's toArray() method to filter relevant shares
-  stats.recentShares.toArray().forEach(share => {
-    if (Date.now() - share.timestamp <= windowSize) {
-      relevantShares.push(share);
-    }
-  });
-  
-  return calculateHashRate(relevantShares)
-}
-
 // Define the structure of a single share
 type Share = {
   timestamp: number;

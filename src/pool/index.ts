@@ -6,9 +6,16 @@ import { sompiToKaspaStringWithSuffix } from '../../wasm/kaspa';
 import { DEBUG } from "../../index"
 import { SharesManager } from '../stratum/sharesManager'; // Import SharesManager
 import { PushMetrics } from '../prometheus'; // Import the PushMetrics class
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
+import config from "../../config/config.json";
 
-const KASPA_BASE_URL = 'https://api.kaspa.org';
+let KASPA_BASE_URL = 'https://api.kaspa.org';
+
+if( config.network === "testnet-10" ) {
+ KASPA_BASE_URL = "https://api-tn10.kaspa.org"
+} else if( config.network === "testnet-11" ) {
+ KASPA_BASE_URL = "https://api-tn11.kaspa.org"
+}
 
 export default class Pool {
   private treasury: Treasury;
@@ -106,8 +113,23 @@ export default class Pool {
 
     const scaledTotal = BigInt(totalWork * 100);
 
-    const response = await axios.get(`${KASPA_BASE_URL}/transactions/${txnId}?inputs=false&outputs=false&resolve_previous_outpoints=no`);
-    const block_hash = response.data.block_hash[0]
+    let block_hash = 'block_hash_placeholder'
+    try {
+      const response = await axios.get(`${KASPA_BASE_URL}/transactions/${txnId}?inputs=false&outputs=false&resolve_previous_outpoints=no`, {
+        timeout: 5000, // Timeout for safety
+      });
+      if (response.status !== 200) {
+        this.monitoring.error(`Unexpected status code: ${response.status}`);
+      }
+
+      if (!response.data) {
+        this.monitoring.error(`Invalid or missing block hash in response data for transaction ${txnId}`);
+      } else {
+        block_hash = response.data.block_hash[0]
+      }
+    } catch (error) {
+        this.handleError(error, `Fetching block hash for transaction ${txnId}`);
+    }
 
     // Allocate rewards proportionally based on difficulty
     for (const [address, work] of works) {
@@ -127,4 +149,16 @@ export default class Pool {
     // Handle pool fee revenue
     if (works.size > 0 && poolFee > 0) this.revenuize(poolFee);
   }
+
+  handleError(error: unknown, context: string): void {
+    if (error instanceof AxiosError) {
+      this.monitoring.error(`API call failed: ${error.message}`);
+      if (error.response) {
+        this.monitoring.error(`Response status: ${error.response.status}`);
+        if (DEBUG) this.monitoring.error(`Response data: ${JSON.stringify(error.response.data)}`);
+      }
+    } else {
+      this.monitoring.error(`Unexpected error: ${error}`);
+    }
+  } 
 }

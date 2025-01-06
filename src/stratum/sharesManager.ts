@@ -404,7 +404,7 @@ export class SharesManager {
     }
 
     var previousMinDiff = stats.minDiff
-    var newMinDiff = Math.max(4, minDiff)
+    var newMinDiff = Math.max(32, minDiff)
     if (newMinDiff != previousMinDiff) {
       this.monitoring.log(`updating vardiff to ${newMinDiff} for client ${stats.workerName}`)
       stats.varDiffStartTime = zeroDateMillS

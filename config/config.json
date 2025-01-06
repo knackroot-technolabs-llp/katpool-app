@@ -12,7 +12,7 @@
     "templates": {
       "cacheSize": 300
     },
-    "difficulty": 4096,
+    "difficulty": 2048,
     "sharesPerMinute": 20,
     "extraNonceSize": 2, 
     "clampPow2": true,

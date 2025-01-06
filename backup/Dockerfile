@@ -1,3 +1,5 @@
+FROM ubuntu:latest
+
 # Use an official PostgreSQL image as the base
 FROM postgres:latest
 

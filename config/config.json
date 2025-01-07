@@ -1,7 +1,6 @@
 {
   "node" : ["https://us-east.nachowyborski.xyz/", "https://us-west.nachowyborski.xyz/", "https://de.nachowyborksi.xyz/", "https://turkey.nachowyborski.xyz/", "https://india.nachowyborski.xyz/", "https://singapore.nachowyborski.xyz/", "https://brazil.nachowyborski.xyz/", "https://italy.nachowyborski.xyz/"],
   "network" : "mainnet",
-  "paymentInterval": 1,
   "pool_id" : "us-katpool1",
   "location" : "us-east",
   "hostname" : "kas.katpool.xyz",  
@@ -13,7 +12,7 @@
     "templates": {
       "cacheSize": 300
     },
-    "difficulty": 4096,
+    "difficulty": 2048,
     "sharesPerMinute": 20,
     "extraNonceSize": 2, 
     "clampPow2": true,

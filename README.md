@@ -90,7 +90,7 @@ remember to modify docker-image.yml with your own image.
 
 ### Start and check the pool
 
-To start the pool, you need to run `docker compose up -d` or the required command depending of your dcker setup
+To start the pool, you need to run `docker compose up -d` or the required command depending of your docker setup
 You can use `docker logs -f katpool-app` to see the output of your pool instance. We recommned to use DEBUG=1 at the beginning.
 After ten minites you should be able to connect to the metrics, received info fo the state of the treasury and configurations via port 8080 at the following paths
 

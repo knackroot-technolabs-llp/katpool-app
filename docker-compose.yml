@@ -65,7 +65,7 @@ services:
   #   command: kaspad --yes --nologfiles --disable-upnp --utxoindex --testnet --netsuffix=11 --rpclisten=0.0.0.0:16310 --rpclisten-borsh=0.0.0.0:17310 --rpclisten-json=0.0.0.0:18310
 
   go-app:
-    image: ghcr.io/argonmining/katpool-blocktemplate-fetcher:beta-v1.0.0-main  # Build the Go app from the ./app directory
+    image: ghcr.io/argonmining/katpool-blocktemplate-fetcher:beta-v1.0.2-main  # Build the Go app from the ./app directory
     pull_policy: always
     container_name: go-app
     env_file:
@@ -80,7 +80,7 @@ services:
     restart: always
 
   katpool-app:
-    image: ghcr.io/argonmining/katpool-app:beta-v1.0.0-main
+    image: ghcr.io/argonmining/katpool-app:beta-v1.0.2-main
     pull_policy: always
     container_name: katpool-app
     depends_on:
@@ -94,13 +94,12 @@ services:
       - backend
     volumes:
       - ./config:/app/config
-      - ./wasm:/app/wasm
     env_file:
       - .env
     restart: always
 
   katpool-monitor:
-    image: ghcr.io/argonmining/katpool-monitor:beta-v1.0.0-main
+    image: ghcr.io/argonmining/katpool-monitor:beta-v1.0.2-main
     pull_policy: always
     container_name: katpool-monitor
     depends_on:
@@ -115,14 +114,13 @@ services:
     restart: always
 
   katpool-payment:
-    image: ghcr.io/argonmining/katpool-payment:beta-v1.0.0-main
+    image: ghcr.io/argonmining/katpool-payment:beta-v1.0.2-main
     pull_policy: always
     container_name: katpool-payment
     depends_on:
       - postgres
     volumes:
       - ./config:/app/config
-      - ./wasm:/app/wasm
     networks:
       - backend
     env_file:
@@ -131,11 +129,13 @@ services:
 
   prometheus:
     image: prom/prometheus
+    user: root
     container_name: katpool-prmths
     depends_on:
       - postgres
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - /root/docker_deployment/prometheus_data:/prometheus
     networks:
       - backend
     command:
@@ -164,18 +164,18 @@ services:
       - katpool-monitor
     restart: always
 
-  # postgres-backup:
-  #   image: katpool-backup:0.4
-  #   container_name: katpool-backup
-  #   depends_on:
-  #     - postgres
-  #   env_file:
-  #     - .env
-  #   volumes:
-  #     - ./backup/files:/backup/files
-  #   networks:
-  #     - backend
-  #   restart: always
+  katpool-backup:
+    image: ghcr.io/knackroot-technolabs-llp/katpool-app-db-backup:beta-v1.0.2-main
+    container_name: katpool-backup
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    volumes:
+      - /root/docker_deployment/backup/files:/backup/files
+    networks:
+      - backend
+    restart: always
 
 networks:
   backend:

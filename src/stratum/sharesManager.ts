@@ -410,7 +410,7 @@ export class SharesManager {
       stats.varDiffStartTime = zeroDateMillS
       stats.varDiffWindow = 0
       stats.minDiff = Math.min(4096, newMinDiff)
-      varDiff.labels(stats.workerName).set(newMinDiff);
+      varDiff.labels(stats.workerName).set(stats.minDiff);
     }
     return previousMinDiff
   }

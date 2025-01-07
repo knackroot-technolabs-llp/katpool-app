@@ -165,7 +165,7 @@ services:
     restart: always
 
   katpool-backup:
-    image: ghcr.io/knackroot-technolabs-llp/katpool-app-db-backup:beta-v1.0.2-main
+    image: ghcr.io/argonmining/katpool-app-db-backup:beta-v1.0.2-main
     container_name: katpool-backup
     depends_on:
       - postgres

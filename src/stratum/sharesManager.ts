@@ -41,7 +41,7 @@ export interface WorkerStats {
 
 type MinerData = {
   sockets: Set<Socket<any>>,
-  workerStats: WorkerStats
+  workerStats: Map<string, WorkerStats>
 };
 
 const varDiffThreadSleep: number = 10
@@ -73,9 +73,8 @@ export class SharesManager {
   }
 
   getOrCreateWorkerStats(workerName: string, minerData: MinerData): WorkerStats {
-    let workerStats = minerData.workerStats;
-    if (!workerStats) {
-      workerStats = {
+    if (!minerData.workerStats.has(workerName)) {
+      const workerStats: WorkerStats = {
         blocksFound: 0,
         sharesFound: 0,
         sharesDiff: 0,
@@ -87,65 +86,46 @@ export class SharesManager {
         varDiffStartTime: Date.now(),
         varDiffSharesFound: 0,
         varDiffWindow: 0,
-        minDiff: 1, // Set to initial difficulty
-        recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(), // Initialize denque correctly
-        hashrate: 0 // Initialize hashrate property
+        minDiff: 128, // Initial difficulty
+        recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(),
+        hashrate: 0
       };
-      minerData.workerStats = workerStats;
+      minerData.workerStats.set(workerName, workerStats);
       if (DEBUG) this.monitoring.debug(`SharesManager: Created new worker stats for ${workerName}`);
     }
-    return workerStats;
+    return minerData.workerStats.get(workerName)!;
   }
 
   async addShare(minerId: string, address: string, hash: string, difficulty: number, nonce: bigint, templates: any, encoding: Encoding) {
     // Critical Section: Check and Add Share
     if (this.contributions.has(nonce)) {
       metrics.updateGaugeInc(minerDuplicatedShares, [minerId, address]);
-      // throw Error('Duplicate share');
       console.log('Duplicate share for miner : ', minerId);
-      return
+      return;
     } else {
       this.contributions.set(nonce, { address, difficulty, timestamp: Date.now(), minerId });
     }
 
     const timestamp = Date.now();
     let minerData = this.miners.get(address);
-    const currentDifficulty = minerData ? minerData.workerStats.minDiff : difficulty;
-
-    metrics.updateGaugeInc(minerAddedShares, [minerId, address]);
-
-    if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - Nonce: ${nonce} - Hash: ${hash}`);
-
-    // Initial setup for a new miner
     if (!minerData) {
       minerData = {
         sockets: new Set(),
-        workerStats: {
-          blocksFound: 0,
-          sharesFound: 0,
-          sharesDiff: 0,
-          staleShares: 0,
-          invalidShares: 0,
-          workerName: minerId,
-          startTime: Date.now(),
-          lastShare: Date.now(),
-          varDiffStartTime: Date.now(),
-          varDiffSharesFound: 0,
-          varDiffWindow: 0,
-          minDiff: currentDifficulty,
-          recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(), // Initialize recentShares
-          hashrate: 0 // Initialize hashrate property
-        }
+        workerStats: new Map()
       };
       this.miners.set(address, minerData);
     }
+    
+    const workerStats = this.getOrCreateWorkerStats(minerId, minerData);
+    const currentDifficulty = workerStats.minDiff || difficulty;
+
+    if (DEBUG) this.monitoring.debug(`SharesManager: Share added for ${minerId} - Address: ${address} - Nonce: ${nonce}`);
 
     const state = templates.getPoW(hash);
     if (!state) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Stale header for miner ${minerId} and hash: ${hash}`);
       metrics.updateGaugeInc(minerStaleShares, [minerId, address]);
-      // throw Error('Stale header');
-      return
+      return;
     }
 
     const [isBlock, target] = state.checkWork(nonce);
@@ -153,16 +133,15 @@ export class SharesManager {
       if (DEBUG) this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
       metrics.updateGaugeInc(minerIsBlockShare, [minerId, address]);
       const report = await templates.submit(minerId, hash, nonce);
-      if (report === "success") minerData.workerStats.blocksFound++;
+      if (report === "success") workerStats.blocksFound++;
     }
 
     const validity = target <= calculateTarget(currentDifficulty);
     if (!validity) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Invalid share for target: ${target} for miner ${minerId}`);
       metrics.updateGaugeInc(minerInvalidShares, [minerId, address]);
-      // throw Error('Invalid share');
-      minerData.workerStats.invalidShares++
-      return
+      workerStats.invalidShares++;
+      return;
     }
 
     if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block share added from: ${minerId} with address ${address} for nonce: ${nonce}`);
@@ -170,17 +149,17 @@ export class SharesManager {
     const share = { minerId, address, difficulty, timestamp: Date.now() };
     this.shareWindow.push(share);
 
-    minerData.workerStats.sharesFound++;
-    minerData.workerStats.varDiffSharesFound++;
-    minerData.workerStats.lastShare = timestamp;
-    minerData.workerStats.minDiff = currentDifficulty;
+    workerStats.sharesFound++;
+    workerStats.varDiffSharesFound++;
+    workerStats.lastShare = timestamp;
+    workerStats.minDiff = currentDifficulty;
 
     // Update recentShares with the new share
-    minerData.workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty, workerName: minerId });
+    workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty, workerName: minerId });
 
     const windowSize = 10 * 60 * 1000; // 10 minutes window
-    while (minerData.workerStats.recentShares.length > 0 && Date.now() - minerData.workerStats.recentShares.peekFront()!.timestamp > windowSize) {
-      minerData.workerStats.recentShares.shift();
+    while (workerStats.recentShares.length > 0 && Date.now() - workerStats.recentShares.peekFront()!.timestamp > windowSize) {
+      workerStats.recentShares.shift();
     }
   }
 
@@ -195,23 +174,24 @@ export class SharesManager {
       let totalRate = 0;
 
       this.miners.forEach((minerData, address) => {
-        const stats = minerData.workerStats;
-        let rate = 0
-        const workerWiseHashRate = getAvgHashRateWorkerWise(stats)
-        workerWiseHashRate.forEach((workerRate, workerName) =>{
-          rate += workerRate
-          metrics.updateGaugeValue(workerHashRateGauge, [workerName, address], workerRate);
-        })
-        totalRate += rate;
-        const rateStr = stringifyHashrate(rate);
-        const ratioStr = `${stats.sharesFound}/${stats.staleShares}/${stats.invalidShares}`;
-        lines.push(
-          ` ${stats.workerName.padEnd(15)}| ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${stats.blocksFound.toString().padEnd(12)} | ${(Date.now() - stats.startTime) / 1000}s`
-        );
-        metrics.updateGaugeValue(minerHashRateGauge, [stats.workerName, address], rate);
+        minerData.workerStats.forEach((stats, workerName) => {
+          let rate = 0;
+          const workerWiseHashRate = getAvgHashRateWorkerWise(stats);
+          workerWiseHashRate.forEach((workerRate, workerName) => {
+            rate += workerRate;
+            metrics.updateGaugeValue(workerHashRateGauge, [workerName, address], workerRate);
+          });
+          totalRate += rate;
+          const rateStr = stringifyHashrate(rate);
+          const ratioStr = `${stats.sharesFound}/${stats.staleShares}/${stats.invalidShares}`;
+          lines.push(
+            ` ${stats.workerName.padEnd(15)}| ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${stats.blocksFound.toString().padEnd(12)} | ${(Date.now() - stats.startTime) / 1000}s`
+          );
+          metrics.updateGaugeValue(minerHashRateGauge, [stats.workerName, address], rate);
 
-        // Update worker's hashrate in workerStats
-        stats.hashrate = rate;  
+          // Update worker's hashrate in workerStats
+          stats.hashrate = rate;
+        });
       });
 
       lines.sort();
@@ -221,17 +201,23 @@ export class SharesManager {
       if (DEBUG) {
         this.monitoring.debug(`SharesManager: Total pool hash rate updated to ${rateStr}`);
       }
-  
+
       const overallStats = Array.from(this.miners.values()).reduce((acc: any, minerData: MinerData) => {
-        const stats = minerData.workerStats;
-        acc.sharesFound += stats.sharesFound;
-        acc.staleShares += stats.staleShares;
-        acc.invalidShares += stats.invalidShares;
+        minerData.workerStats.forEach((stats) => {
+          acc.sharesFound += stats.sharesFound;
+          acc.staleShares += stats.staleShares;
+          acc.invalidShares += stats.invalidShares;
+        });
         return acc;
       }, { sharesFound: 0, staleShares: 0, invalidShares: 0 });
+
       const ratioStr = `${overallStats.sharesFound}/${overallStats.staleShares}/${overallStats.invalidShares}`;
       str += "\n-------------------------------------------------------------------------------\n";
-      str += `                | ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${Array.from(this.miners.values()).reduce((acc, minerData) => acc + minerData.workerStats.blocksFound, 0).toString().padEnd(12)} | ${(Date.now() - start) / 1000}s`;
+      str += `                | ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${Array.from(this.miners.values()).reduce((acc, minerData) => {
+        let total = 0;
+        minerData.workerStats.forEach(stats => total += stats.blocksFound);
+        return acc + total;
+      }, 0).toString().padEnd(12)} | ${(Date.now() - start) / 1000}s`;
       str += "\n===============================================================================\n";
       console.log(str);
     }, 600000); // 10 minutes
@@ -260,12 +246,19 @@ export class SharesManager {
     this.contributions.clear();
   }
 
-  updateSocketDifficulty(address: string, newDifficulty: number) {
+  updateSocketDifficulty(address: string, workerName: string, newDifficulty: number) {
     const minerData = this.miners.get(address);
     if (minerData) {
+      if (DEBUG) this.monitoring.debug(`SharesManager: Updating difficulty for worker ${workerName} to ${newDifficulty}`);
       minerData.sockets.forEach(socket => {
-        socket.data.difficulty = newDifficulty;
+        if (socket.data.workers.has(workerName)) {
+          const oldDiff = socket.data.difficulty;
+          socket.data.difficulty = newDifficulty;
+          if (DEBUG) this.monitoring.debug(`SharesManager: Socket difficulty updated for worker ${workerName} from ${oldDiff} to ${newDifficulty}`);
+        }
       });
+    } else {
+      if (DEBUG) this.monitoring.debug(`SharesManager: No miner data found for address ${address} when updating difficulty`);
     }
   }
 
@@ -285,106 +278,98 @@ export class SharesManager {
   }
 
   startVardiffThread(expectedShareRate: number, clamp: boolean): void {
-    // 20 shares/min allows a ~99% confidence assumption of:
-    //   < 100% variation after 1m
-    //   < 50% variation after 3m
-    //   < 25% variation after 10m
-    //   < 15% variation after 30m
-    //   < 10% variation after 1h
-    //   < 5% variation after 4h
-    var windows: number[] = [1, 3, 10, 30, 60, 240, 0]
-    var tolerances: number[] = [1, 0.5, 0.25, 0.15, 0.1, 0.05, 0.05]
-  
+    var windows: number[] = [1, 3, 10, 30, 60, 240, 0];
+    var tolerances: number[] = [1, 0.5, 0.25, 0.15, 0.1, 0.05, 0.05];
+
     setInterval(async () => {
       await this.sleep(varDiffThreadSleep * 1000);
-  
-      // don't like locking entire stats struct - risk should be negligible
-      // if mutex is ultimately needed, should move to one per client
-      // sh.statsLock.Lock()
-  
-      var stats: string = "\n=== vardiff ===================================================================\n\n"
-      stats += "  worker name  |    diff     |  window  |  elapsed   |    shares   |   rate    \n"
-      stats += "-------------------------------------------------------------------------------\n"
-  
-      var statsLines: string[] = []
-      var toleranceErrs: string[] = []
-  
+
+      var stats: string = "\n=== vardiff ===================================================================\n\n";
+      stats += "  worker name  |    diff     |  window  |  elapsed   |    shares   |   rate    \n";
+      stats += "-------------------------------------------------------------------------------\n";
+
+      var statsLines: string[] = [];
+      var toleranceErrs: string[] = [];
+
       for (const [address, minerData] of this.miners) {
-        const workerStats = minerData.workerStats;
-        var worker: string = workerStats.workerName
-        if (workerStats.varDiffStartTime == zeroDateMillS) {
-          // no vardiff sent to client
-          toleranceErrs = toleranceErrs.concat(toleranceErrs, `no diff sent to client ${worker}`)
-          continue
+        if (!minerData || !minerData.workerStats) {
+          if (DEBUG) this.monitoring.debug(`SharesManager: Invalid miner data for address ${address}`);
+          continue;
         }
-  
-        var diff : number = workerStats.minDiff
-        var shares: number = workerStats.varDiffSharesFound
-        var duration: number = (Date.now() - workerStats.varDiffStartTime) / 60000
-        var shareRate: number = shares / duration
-        var shareRateRatio: number = shareRate / expectedShareRate
-        var window: number = windows[workerStats.varDiffWindow]
-        var tolerance: number = tolerances[workerStats.varDiffWindow]
-  
-        statsLines = statsLines.concat(` ${worker.padEnd(14)}| ${diff.toFixed(2).padStart(11)} | ${window.toString().padStart(8)} | ${duration.toFixed(2).padStart(10)} | ${shares.toString().padStart(11)} | ${shareRate.toFixed(2).padStart(9)}\n`)
-  
-        // check final stage first, as this is where majority of time spent
-        if (window == 0) {
-          if (Math.abs(1 - shareRateRatio) >= tolerance) {
-            // final stage submission rate OOB
-            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance*100}%)`)
-            this.updateVarDiff(workerStats, diff * shareRateRatio, clamp)
+
+        for (const [workerName, workerStats] of minerData.workerStats) {
+          if (!workerStats) {
+            if (DEBUG) this.monitoring.debug(`SharesManager: Invalid worker stats for worker ${workerName}`);
+            continue;
           }
-          continue
-        }
-  
-        // check all previously cleared windows
-        var i: number = 1
-        for (; i < workerStats.varDiffWindow; ) {
-          if (Math.abs(1 - shareRateRatio) >= tolerances[i]) {
-            // breached tolerance of previously cleared window
-            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i]*100}%) for ${windows[i]}m window`)
-            this.updateVarDiff(workerStats, diff * shareRateRatio, clamp)
-            break
+
+          if (workerStats.varDiffStartTime == zeroDateMillS) {
+            toleranceErrs = toleranceErrs.concat(toleranceErrs, `no diff sent to client ${workerName}`);
+            continue;
           }
-          i++
-        }
-        if (i < workerStats.varDiffWindow) {
-          // should only happen if we broke previous loop
-          continue
-        }
-  
-        // check for current window max exception
-        if (shares >= window * expectedShareRate * (1 + tolerance)) {
-          // submission rate > window max
-          toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[i]*100}%) for ${windows[i]}m window`)
-          this.updateVarDiff(workerStats, diff*shareRateRatio, clamp)
-          continue
-        }
-  
-        // check whether we've exceeded window length
-        if (duration >= window) {
-          // check for current window min exception
-          if (shares <= window * expectedShareRate * (1 - tolerance)) {
-            // submission rate < window min
-            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${worker} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[i]*100}%) for ${windows[i]}m window`)
-            this.updateVarDiff(workerStats, diff * Math.max(shareRateRatio, 0.1), clamp)
-            continue
+
+          var diff: number = workerStats.minDiff;
+          var shares: number = workerStats.varDiffSharesFound;
+          var duration: number = (Date.now() - workerStats.varDiffStartTime) / 60000;
+          var shareRate: number = shares / duration;
+          var shareRateRatio: number = shareRate / expectedShareRate;
+          var window: number = windows[workerStats.varDiffWindow];
+          var tolerance: number = tolerances[workerStats.varDiffWindow];
+
+          statsLines = statsLines.concat(
+            ` ${workerName.padEnd(14)}| ${diff.toFixed(2).padStart(11)} | ${window.toString().padStart(8)} | ${duration.toFixed(2).padStart(10)} | ${shares.toString().padStart(11)} | ${shareRate.toFixed(2).padStart(9)}\n`
+          );
+
+          // check final stage first, as this is where majority of time spent
+          if (window == 0) {
+            if (Math.abs(1 - shareRateRatio) >= tolerance) {
+              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance * 100}%)`);
+              this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
+            }
+            continue;
           }
-  
-          workerStats.varDiffWindow++
+
+          // check all previously cleared windows
+          var i: number = 1;
+          for (; i < workerStats.varDiffWindow;) {
+            if (Math.abs(1 - shareRateRatio) >= tolerances[i]) {
+              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
+              this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
+              break;
+            }
+            i++;
+          }
+          if (i < workerStats.varDiffWindow) {
+            continue;
+          }
+
+          // check for current window max exception
+          if (shares >= window * expectedShareRate * (1 + tolerance)) {
+            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
+            this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
+            continue;
+          }
+
+          // check whether we've exceeded window length
+          if (duration >= window) {
+            // check for current window min exception
+            if (shares <= window * expectedShareRate * (1 - tolerance)) {
+              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
+              this.updateVarDiff(workerStats, diff * Math.max(shareRateRatio, 0.1), clamp);
+              continue;
+            }
+            workerStats.varDiffWindow++;
+          }
         }
       }
 
-      statsLines.sort()
-      stats += statsLines + "\n"
-      stats += `\n\n===============================================================================\n`
-      stats += `\n${toleranceErrs}\n\n\n`
+      statsLines.sort();
+      stats += statsLines + "\n";
+      stats += `\n\n===============================================================================\n`;
+      stats += `\n${toleranceErrs}\n\n\n`;
       if (DEBUG) {
-        this.monitoring.debug(stats)
+        this.monitoring.debug(stats);
       }
-  
-      // sh.statsLock.Unlock()
     }, varDiffThreadSleep * 1000);
   }
 
@@ -404,7 +389,7 @@ export class SharesManager {
     }
 
     var previousMinDiff = stats.minDiff
-    var newMinDiff = Math.max(32, minDiff)
+    var newMinDiff = Math.max(8, minDiff)
     if (newMinDiff != previousMinDiff) {
       this.monitoring.log(`updating vardiff to ${newMinDiff} for client ${stats.workerName}`)
       stats.varDiffStartTime = zeroDateMillS
@@ -421,7 +406,12 @@ export class SharesManager {
   }
   
   getClientVardiff(worker: Worker): number {
-    const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.address)!);
-    return stats.minDiff
+    const minerData = this.miners.get(worker.address);
+    if (!minerData) {
+      if (DEBUG) this.monitoring.debug(`SharesManager: No miner data found for address ${worker.address}, returning default difficulty`);
+      return 128; // Return default difficulty if no miner data exists
+    }
+    const stats = this.getOrCreateWorkerStats(worker.name, minerData);
+    return stats.minDiff;
   }
 }

@@ -3,7 +3,7 @@
   "network" : "mainnet",
   "pool_id" : "us-katpool1",
   "location" : "us-east",
-  "hostname" : "katpool.nachowyborski.xyz",  
+  "hostname" : "kas.katpool.xyz",  
   "block_wait_time_seconds": "3",
   "redis_address" : "redis:6379",
   "redis_channel": "NewBlockTemplateChannel",
@@ -22,6 +22,6 @@
     "fee": 0
   },
   "payoutsPerDay": 2,
-  "thresholdAmount": "5000000000",
+  "thresholdAmount": "500000000",
   "backupEmailAddress": ""
 }

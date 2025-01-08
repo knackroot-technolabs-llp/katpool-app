@@ -125,23 +125,27 @@ export class SharesManager {
     if (!state) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Stale header for miner ${minerId} and hash: ${hash}`);
       metrics.updateGaugeInc(minerStaleShares, [minerId, address]);
+      workerStats.staleShares++; // Add this to track stale shares in worker stats
       return;
     }
 
     const [isBlock, target] = state.checkWork(nonce);
-    if (isBlock) {
-      if (DEBUG) this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
-      metrics.updateGaugeInc(minerIsBlockShare, [minerId, address]);
-      const report = await templates.submit(minerId, hash, nonce);
-      if (report === "success") workerStats.blocksFound++;
-    }
-
     const validity = target <= calculateTarget(currentDifficulty);
     if (!validity) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Invalid share for target: ${target} for miner ${minerId}`);
       metrics.updateGaugeInc(minerInvalidShares, [minerId, address]);
       workerStats.invalidShares++;
       return;
+    }
+
+    // Share is valid at this point, increment the valid share metric
+    metrics.updateGaugeInc(minerAddedShares, [minerId, address]);
+
+    if (isBlock) {
+      if (DEBUG) this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
+      metrics.updateGaugeInc(minerIsBlockShare, [minerId, address]);
+      const report = await templates.submit(minerId, hash, nonce);
+      if (report === "success") workerStats.blocksFound++;
     }
 
     if (DEBUG) this.monitoring.debug(`SharesManager: Contributed block share added from: ${minerId} with address ${address} for nonce: ${nonce}`);

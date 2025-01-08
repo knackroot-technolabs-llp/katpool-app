@@ -87,7 +87,7 @@ export class SharesManager {
         varDiffStartTime: Date.now(),
         varDiffSharesFound: 0,
         varDiffWindow: 0,
-        minDiff: 128, // Set to initial difficulty
+        minDiff: 1, // Set to initial difficulty
         recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(), // Initialize denque correctly
         hashrate: 0 // Initialize hashrate property
       };

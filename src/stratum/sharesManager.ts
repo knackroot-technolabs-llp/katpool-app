@@ -87,7 +87,7 @@ export class SharesManager {
         varDiffStartTime: Date.now(),
         varDiffSharesFound: 0,
         varDiffWindow: 0,
-        minDiff: 1, // Set to initial difficulty
+        minDiff: 128, // Set to initial difficulty
         recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(), // Initialize denque correctly
         hashrate: 0 // Initialize hashrate property
       };
@@ -404,12 +404,12 @@ export class SharesManager {
     }
 
     var previousMinDiff = stats.minDiff
-    var newMinDiff = Math.max(32, minDiff)
+    var newMinDiff = Math.max(8, minDiff)
     if (newMinDiff != previousMinDiff) {
       this.monitoring.log(`updating vardiff to ${newMinDiff} for client ${stats.workerName}`)
       stats.varDiffStartTime = zeroDateMillS
       stats.varDiffWindow = 0
-      stats.minDiff = Math.min(4096, newMinDiff)
+      stats.minDiff = Math.min(8192, newMinDiff)
       varDiff.labels(stats.workerName).set(stats.minDiff);
     }
     return previousMinDiff

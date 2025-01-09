@@ -12,8 +12,8 @@
     "templates": {
       "cacheSize": 300
     },
-    "difficulty": 4096,
-    "sharesPerMinute": 20,
+    "difficulty": 2048,
+    "sharesPerMinute": 10,
     "extraNonceSize": 2, 
     "clampPow2": true,
     "varDiff": true

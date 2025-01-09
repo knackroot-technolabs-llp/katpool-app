@@ -74,9 +74,9 @@ export default class Stratum extends EventEmitter {
           var varDiff = this.sharesManager.getClientVardiff(worker)
 				  if (varDiff != socket.data.difficulty && varDiff != 0) {
             this.monitoring.log(`Stratum: Updating VarDiff for ${worker.name} from ${socket.data.difficulty} to ${varDiff}`);
-            this.sharesManager.updateSocketDifficulty(worker.address, varDiff)
-            this.reflectDifficulty(socket)
-            this.sharesManager.startClientVardiff(worker)
+            this.sharesManager.updateSocketDifficulty(worker.address, worker.name, varDiff);
+            this.reflectDifficulty(socket, worker.name);
+            this.sharesManager.startClientVardiff(worker);
           }
         });
 
@@ -85,7 +85,7 @@ export default class Stratum extends EventEmitter {
     });
   }
 
-  reflectDifficulty(socket: Socket<Miner>) {
+  reflectDifficulty(socket: Socket<Miner>, workerName: string) {
     const event: Event<'mining.set_difficulty'> = {
       method: 'mining.set_difficulty',
       params: [socket.data.difficulty]
@@ -144,43 +144,50 @@ export default class Stratum extends EventEmitter {
           if (!this.sharesManager.getMiners().has(worker.address)) {
             this.sharesManager.getMiners().set(worker.address, {
               sockets,
-              workerStats: {
-                blocksFound: 0,
-                sharesFound: 0,
-                sharesDiff: 0,
-                staleShares: 0,
-                invalidShares: 0,
-                workerName: worker.name,
-                startTime: Date.now(),
-                lastShare: Date.now(),
-                varDiffStartTime: Date.now(),
-                varDiffSharesFound: 0,
-                varDiffWindow: 0,
-                minDiff: this.difficulty,
-                recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(),
-                hashrate: 0,
-              }
+              workerStats: new Map()
             });
-          } else {
-            const existingMinerData = this.sharesManager.getMiners().get(worker.address);
-            existingMinerData!.sockets = sockets;
-            this.sharesManager.getMiners().set(worker.address, existingMinerData!);
-          }  
+          }
+          
+          const minerData = this.sharesManager.getMiners().get(worker.address)!;
+          if (!minerData.workerStats.has(worker.name)) {
+            minerData.workerStats.set(worker.name, {
+              blocksFound: 0,
+              sharesFound: 0,
+              sharesDiff: 0,
+              staleShares: 0,
+              invalidShares: 0,
+              workerName: worker.name,
+              startTime: Date.now(),
+              lastShare: Date.now(),
+              varDiffStartTime: Date.now(),
+              varDiffSharesFound: 0,
+              varDiffWindow: 0,
+              minDiff: this.difficulty,
+              recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(),
+              hashrate: 0,
+            });
+          }
+
           // Set extranonce
-          let extraNonceParams: any[] = [socket.data.extraNonce]
+          let extraNonceParams: any[] = [socket.data.extraNonce];
           if (socket.data.encoding === Encoding.Bitmain && socket.data.extraNonce != "") {
-            extraNonceParams = [socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)]
-          }  
+            extraNonceParams = [socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)];
+          }
           const event: Event<'mining.set_extranonce'> = {
             method: 'mining.set_extranonce',
             params: extraNonceParams,
-          }
+          };
           socket.write(JSON.stringify(event) + '\n');
-          this.reflectDifficulty(socket);
+          
+          // Set initial difficulty for this worker
+          const workerStats = minerData.workerStats.get(worker.name)!;
+          socket.data.difficulty = workerStats.minDiff;
+          this.reflectDifficulty(socket, worker.name);
+          
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
           break;
         }
-        case 'mining.submit': {          
+        case 'mining.submit': {
           const [address, name] = request.params[0].split('.');
           metrics.updateGaugeInc(minerjobSubmissions, [name, address]);
           if (DEBUG) this.monitoring.debug(`Stratum: Submitting job for Worker Name: ${name}`);
@@ -194,51 +201,47 @@ export default class Stratum extends EventEmitter {
           if (!hash) {
             if (DEBUG) this.monitoring.debug(`Stratum: Job not found - Address: ${address}, Worker Name: ${name}`);
             metrics.updateGaugeInc(jobsNotFound, [name, address]);
-            response.result = false
-            response.error = errors["JOB_NOT_FOUND"]
-            return response
-            // throw Error("Hash not found")
-          }
-          else {
+            response.result = false;
+            response.error = errors["JOB_NOT_FOUND"];
+            return response;
+          } else {
             const minerId = name;
             const minerData = this.sharesManager.getMiners().get(worker.address);
-            const workerDiff = minerData?.workerStats.minDiff;
+            const workerStats = minerData?.workerStats.get(worker.name);
+            const workerDiff = workerStats?.minDiff;
             const socketDiff = socket.data.difficulty;
             if (DEBUG) this.monitoring.debug(`Stratum: Current difficulties , Worker Name: ${minerId} - Worker: ${workerDiff}, Socket: ${socketDiff}`);
             const currentDifficulty = workerDiff || socketDiff;
             if (DEBUG) this.monitoring.debug(`Stratum: Adding Share - Address: ${address}, Worker Name: ${name}, Hash: ${hash}, Difficulty: ${currentDifficulty}`);
-            // Add extranonce to noncestr if enabled and submitted nonce is shorter than
-            // expected (16 - <extranonce length> characters)
+
             if (socket.data.extraNonce !== "") {
               const extranonce2Len = 16 - socket.data.extraNonce.length;
-
               if (request.params[2].length <= extranonce2Len) {
-                request.params[2] =
-                socket.data.extraNonce + request.params[2].padStart(extranonce2Len, "0");
+                request.params[2] = socket.data.extraNonce + request.params[2].padStart(extranonce2Len, "0");
               }
             }
-            try{
-              let nonce : bigint;
+
+            try {
+              let nonce: bigint;
               if (socket.data.encoding == Encoding.Bitmain) {
                 nonce = BigInt(request.params[2]);
               } else {
-                nonce = BigInt('0x' + request.params[2]);                
+                nonce = BigInt('0x' + request.params[2]);
               }
-              this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, nonce, this.templates, socket.data.encoding)
-            }
-            catch(err: any) {
+              this.sharesManager.addShare(minerId, worker.address, hash, currentDifficulty, nonce, this.templates, socket.data.encoding);
+            } catch(err: any) {
               if (!(err instanceof Error)) throw err;
               switch (err.message) {
                 case 'Duplicate share':
-                  this.monitoring.debug("DUPLICATE_SHARE")
+                  this.monitoring.debug("DUPLICATE_SHARE");
                   response.error = errors['DUPLICATE_SHARE'];
                   break;
                 case 'Stale header':
-                  this.monitoring.debug("Stale Header : JOB_NOT_FOUND")
+                  this.monitoring.debug("Stale Header : JOB_NOT_FOUND");
                   response.error = errors['JOB_NOT_FOUND'];
                   break;
                 case 'Invalid share':
-                  this.monitoring.debug("LOW_DIFFICULTY_SHARE")
+                  this.monitoring.debug("LOW_DIFFICULTY_SHARE");
                   response.error = errors['LOW_DIFFICULTY_SHARE'];
                   break;
                 default:

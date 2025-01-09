@@ -1,7 +1,7 @@
 import type { IBlock, RpcClient, IRawBlock, IRawHeader } from "../../../wasm/kaspa"
 import { Header, PoW } from "../../../wasm/kaspa"
 import Jobs from "./jobs"
-import { minedBlocksGauge, paidBlocksGauge } from '../../prometheus';
+import { minedBlocksGauge, paidBlocksGauge, successBlocksDetailsGauge } from '../../prometheus';
 import Monitoring from '../../monitoring'
 import { DEBUG } from '../../../index'
 import { metrics } from '../../../index';   
@@ -60,10 +60,11 @@ export default class Templates {
       block: template,
       allowNonDAABlocks: false
     })
-    metrics.updateGaugeInc(minedBlocksGauge, [minerId, this.address, newHash, template.header.daaScore.toString(), Date.now().toString()]);
+    metrics.updateGaugeInc(minedBlocksGauge, [minerId, this.address]);
     
     if (report.report.type == "success") {
-      metrics.updateGaugeInc(paidBlocksGauge, [minerId, this.address, newHash, template.header.daaScore.toString(), Date.now().toString()]);
+      metrics.updateGaugeInc(paidBlocksGauge, [minerId, this.address]);
+      metrics.updateGaugeValue(successBlocksDetailsGauge, [minerId, this.address, newHash, template.header.daaScore.toString()], Date.now());
       if (DEBUG) this.monitoring.debug(`Templates: the block by miner ${minerId} has been accepted with hash : ${newHash}`)
     } else { // Failed
       if (DEBUG) this.monitoring.debug(`Templates: the block by ${minerId} has been rejected, reason: ${report.report.reason}`)

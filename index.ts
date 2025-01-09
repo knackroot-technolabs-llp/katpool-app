@@ -75,7 +75,6 @@ if (!treasuryPrivateKey) {
   throw new Error('Environment variable TREASURY_PRIVATE_KEY is not set.');
 }
 
-
 const katpoolPshGw = process.env.PUSHGATEWAY;
 if (!katpoolPshGw) {
   throw new Error('Environment variable PUSHGATEWAY is not set.');

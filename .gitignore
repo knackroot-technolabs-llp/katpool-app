@@ -12,3 +12,4 @@ katpool.code-workspace
 katpool-app-logs.txt
 getNewBlockTemplate
 package-lock.json
+IMPROVEMENTS.md

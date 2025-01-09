@@ -13,7 +13,7 @@ export { register };
 export const minerHashRateGauge = new Gauge({
   name: 'miner_hash_rate_GHps',
   help: 'Hash rate of each miner',
-  labelNames: ['miner_id', 'wallet_address']
+  labelNames: ['wallet_address']
 });
 
 export const activeMinerGuage = new Gauge({

@@ -60,10 +60,10 @@ export default class Templates {
       block: template,
       allowNonDAABlocks: false
     })
-    metrics.updateGaugeInc(minedBlocksGauge, [minerId, this.address]);
+    metrics.updateGaugeInc(minedBlocksGauge, [minerId, this.address, newHash, template.header.daaScore.toString(), Date.now().toString()]);
     
     if (report.report.type == "success") {
-      metrics.updateGaugeInc(paidBlocksGauge, [minerId, this.address]);
+      metrics.updateGaugeInc(paidBlocksGauge, [minerId, this.address, newHash, template.header.daaScore.toString(), Date.now().toString()]);
       if (DEBUG) this.monitoring.debug(`Templates: the block by miner ${minerId} has been accepted with hash : ${newHash}`)
     } else { // Failed
       if (DEBUG) this.monitoring.debug(`Templates: the block by ${minerId} has been rejected, reason: ${report.report.reason}`)

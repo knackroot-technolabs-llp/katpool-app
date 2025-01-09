@@ -73,13 +73,13 @@ export const minerStaleShares = new Gauge({
 export const minedBlocksGauge = new Gauge({
   name: 'mined_blocks_1min_count',
   help: 'Total number of mined blocks',
-  labelNames: ['miner_id', 'pool_address']
+  labelNames: ['miner_id', 'pool_address', 'block_hash', 'daa_score', 'timestamp']
 });
 
 export const paidBlocksGauge = new Gauge({
   name: 'paid_blocks_1min_count',
   help: 'Total number of paid blocks',
-  labelNames: ['miner_id', 'pool_address']
+  labelNames: ['miner_id', 'pool_address', 'block_hash', 'daa_score', 'timestamp']
 });
 
 export const jobsNotFound = new Gauge({

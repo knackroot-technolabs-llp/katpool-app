@@ -20,37 +20,17 @@ export function stringifyHashrate(ghs: number): string {
   return `${hr.toFixed(2)}${unit}H/s`;
 }
 
-// Define the structure of a single share
-type Share = {
-  timestamp: number;
-  difficulty: number;
-  workerName: string;
-};
-
-export function getAvgHashRateWorkerWise(stats: WorkerStats) {
+export function getAverageHashrateGHs(stats: WorkerStats): number {
   const windowSize = 10 * 60 * 1000; // 10 minutes window
-  const relevantShares: Record<string, Share[]> = {};
-  
-  const myMap = new Map<string, number>(); // Map to store hash rates for each worker
+  const relevantShares: { timestamp: number, difficulty: number }[] = [];
 
   // Use Denque's toArray() method to filter relevant shares
-  stats.recentShares.toArray().forEach((share: Share) => {
+  stats.recentShares.toArray().forEach(share => {
     if (Date.now() - share.timestamp <= windowSize) {
-      if (!relevantShares[share.workerName]) {
-        relevantShares[share.workerName] = [];
-      }
-      relevantShares[share.workerName].push(share);
+      relevantShares.push(share);
     }
   });
 
-  Object.keys(relevantShares).forEach(workerName => {
-    myMap.set(workerName, calculateHashRate(relevantShares[workerName]));
-  });
-
-  return myMap;
-}
-
-function calculateHashRate(relevantShares: Share[]) {
   if (relevantShares.length === 0) return 0;
 
   const avgDifficulty = relevantShares.reduce((acc, share) => acc + diffToHash(share.difficulty), 0) / relevantShares.length;

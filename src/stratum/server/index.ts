@@ -12,7 +12,8 @@ export type Miner = {
   difficulty: number
   extraNonce: string
   workers: Map<string, Worker>
-  encoding: Encoding 
+  encoding: Encoding
+  asicType: string 
   cachedBytes: string
 }
 
@@ -49,6 +50,7 @@ export default class Server {
       workers: new Map(),
       encoding: Encoding.BigHeader,
       cachedBytes: "",
+      asicType: "",
     }
   }
 

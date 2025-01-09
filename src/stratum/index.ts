@@ -7,7 +7,7 @@ import type Templates from './templates/index.ts';
 import { Address, type IRawHeader } from "../../wasm/kaspa";
 import { Encoding, encodeJob } from './templates/jobs/encoding.ts';
 import { SharesManager } from './sharesManager';
-import { minerjobSubmissions, jobsNotFound } from '../prometheus'
+import { minerjobSubmissions, jobsNotFound, activeMinerGuage } from '../prometheus'
 import Monitoring from '../monitoring/index.ts';
 import { DEBUG } from '../../index'
 import { Mutex } from 'async-mutex';
@@ -17,6 +17,7 @@ import JsonBig from 'json-bigint';
 import config from "../../config/config.json";
 
 const bitMainRegex = new RegExp(".*(GodMiner).*", "i")
+const iceRiverRegex = new RegExp(".*(IceRiverMiner).*", "i")
 
 export default class Stratum extends EventEmitter {
   server: Server;
@@ -125,8 +126,11 @@ export default class Stratum extends EventEmitter {
           }   
           if (bitMainRegex.test(minerType)) {
             socket.data.encoding = Encoding.Bitmain;
+            socket.data.asicType = "Bitmain";
             response.result = [null, socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)];
-          }            
+          } else if (iceRiverRegex.test(minerType)) {
+            socket.data.asicType = "IceRiver";
+          } 
           this.subscriptors.add(socket);        
           this.emit('subscription', socket.remoteAddress, request.params[0]);
           this.monitoring.log(`Stratum: Miner subscribed from ${socket.remoteAddress}`);
@@ -165,6 +169,7 @@ export default class Stratum extends EventEmitter {
               minDiff: this.difficulty,
               recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(),
               hashrate: 0,
+              asicType: socket.data.asicType
             });
           }
 
@@ -185,6 +190,8 @@ export default class Stratum extends EventEmitter {
           this.reflectDifficulty(socket, worker.name);
           
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
+
+          metrics.updateGaugeValue(activeMinerGuage, [name, address, Math.floor(Date.now() / 1000).toString(), socket.data.asicType], 1);
           break;
         }
         case 'mining.submit': {

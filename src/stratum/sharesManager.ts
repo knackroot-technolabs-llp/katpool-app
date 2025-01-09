@@ -3,7 +3,7 @@ import { calculateTarget } from "../../wasm/kaspa";
 import { Pushgateway } from 'prom-client';
 import { type Worker } from './server';
 import type { RegistryContentType } from 'prom-client';
-import { stringifyHashrate, getAvgHashRateWorkerWise } from './utils';
+import { stringifyHashrate, getAverageHashrateGHs } from './utils';
 import Monitoring from '../monitoring';
 import { DEBUG } from '../../index';
 import {
@@ -15,7 +15,8 @@ import {
   minerStaleShares,
   minerDuplicatedShares,
   varDiff,
-  workerHashRateGauge
+  workerHashRateGauge,
+  activeMinerGuage
 } from '../prometheus';
 import { metrics } from '../../index';
 // Fix the import statement
@@ -35,8 +36,9 @@ export interface WorkerStats {
   varDiffSharesFound: number;
   varDiffWindow: number;
   minDiff: number;
-  recentShares: Denque<{ timestamp: number, difficulty: number, workerName: string }>;
+  recentShares: Denque<{ timestamp: number, difficulty: number}>;
   hashrate: number; // Added hashrate property
+  asicType: string;
 }
 
 type MinerData = {
@@ -88,7 +90,8 @@ export class SharesManager {
         varDiffWindow: 0,
         minDiff: 128, // Initial difficulty
         recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(),
-        hashrate: 0
+        hashrate: 0,
+        asicType: "",
       };
       minerData.workerStats.set(workerName, workerStats);
       if (DEBUG) this.monitoring.debug(`SharesManager: Created new worker stats for ${workerName}`);
@@ -159,7 +162,7 @@ export class SharesManager {
     workerStats.minDiff = currentDifficulty;
 
     // Update recentShares with the new share
-    workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty, workerName: minerId });
+    workerStats.recentShares.push({ timestamp: Date.now(), difficulty: currentDifficulty});
 
     const windowSize = 10 * 60 * 1000; // 10 minutes window
     while (workerStats.recentShares.length > 0 && Date.now() - workerStats.recentShares.peekFront()!.timestamp > windowSize) {
@@ -178,24 +181,24 @@ export class SharesManager {
       let totalRate = 0;
 
       this.miners.forEach((minerData, address) => {
+        let rate = 0;
         minerData.workerStats.forEach((stats, workerName) => {
-          let rate = 0;
-          const workerWiseHashRate = getAvgHashRateWorkerWise(stats);
-          workerWiseHashRate.forEach((workerRate, workerName) => {
-            rate += workerRate;
-            metrics.updateGaugeValue(workerHashRateGauge, [workerName, address], workerRate);
-          });
+          const workerRate = getAverageHashrateGHs(stats);
+          rate += workerRate;
+          metrics.updateGaugeValue(workerHashRateGauge, [workerName, address], workerRate);
           totalRate += rate;
-          const rateStr = stringifyHashrate(rate);
+          const rateStr = stringifyHashrate(workerRate);
           const ratioStr = `${stats.sharesFound}/${stats.staleShares}/${stats.invalidShares}`;
           lines.push(
             ` ${stats.workerName.padEnd(15)}| ${rateStr.padEnd(14)} | ${ratioStr.padEnd(14)} | ${stats.blocksFound.toString().padEnd(12)} | ${(Date.now() - stats.startTime) / 1000}s`
           );
-          metrics.updateGaugeValue(minerHashRateGauge, [stats.workerName, address], rate);
 
           // Update worker's hashrate in workerStats
-          stats.hashrate = rate;
+          stats.hashrate = workerRate;
+          const status = Date.now() - 600000 >= stats.lastShare ? 1 : 0; // Submission within last 10 minutes                 
+          metrics.updateGaugeValue(activeMinerGuage, [workerName, address, Math.floor(stats.lastShare / 1000).toString(), stats.asicType], status);
         });
+        metrics.updateGaugeValue(minerHashRateGauge, [address], rate);
       });
 
       lines.sort();

@@ -13,14 +13,19 @@ export { register };
 export const minerHashRateGauge = new Gauge({
   name: 'miner_hash_rate_GHps',
   help: 'Hash rate of each miner',
-  labelNames: ['miner_id', 'wallet_address']
+  labelNames: ['wallet_address']
 });
 
-// Existing Gauges
+export const activeMinerGuage = new Gauge({
+  name: 'active_workers_10m_count',
+  help: 'Active workers data',
+  labelNames: ['miner_id', 'wallet_address', 'timestamp', 'asic_type']
+});
+
 export const workerHashRateGauge = new Gauge({
   name: 'worker_hash_rate_GHps',
   help: 'Hash rate of worker',
-  labelNames: ['wokername', 'wallet_address']
+  labelNames: ['woker_name', 'wallet_address']
 });
 
 export const poolHashRateGauge = new Gauge({
@@ -75,6 +80,12 @@ export const paidBlocksGauge = new Gauge({
   name: 'paid_blocks_1min_count',
   help: 'Total number of paid blocks',
   labelNames: ['miner_id', 'pool_address']
+});
+
+export const successBlocksDetailsGauge = new Gauge({
+  name: 'success_blocks_details',
+  help: 'Total number of successful blocks',
+  labelNames: ['miner_id', 'pool_address', 'block_hash', 'daa_score']
 });
 
 export const jobsNotFound = new Gauge({

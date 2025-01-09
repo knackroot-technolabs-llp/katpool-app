@@ -15,7 +15,8 @@ import {
   minerStaleShares,
   minerDuplicatedShares,
   varDiff,
-  workerHashRateGauge
+  workerHashRateGauge,
+  activeMinerGuage
 } from '../prometheus';
 import { metrics } from '../../index';
 // Fix the import statement
@@ -37,6 +38,7 @@ export interface WorkerStats {
   minDiff: number;
   recentShares: Denque<{ timestamp: number, difficulty: number, workerName: string }>;
   hashrate: number; // Added hashrate property
+  asicType: string;
 }
 
 type MinerData = {
@@ -88,7 +90,8 @@ export class SharesManager {
         varDiffWindow: 0,
         minDiff: 128, // Initial difficulty
         recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(),
-        hashrate: 0
+        hashrate: 0,
+        asicType: "",
       };
       minerData.workerStats.set(workerName, workerStats);
       if (DEBUG) this.monitoring.debug(`SharesManager: Created new worker stats for ${workerName}`);
@@ -195,6 +198,8 @@ export class SharesManager {
 
           // Update worker's hashrate in workerStats
           stats.hashrate = rate;
+          const status = Date.now() - 600000 >= stats.lastShare ? 1 : 0; // Submission within last 10 minutes                 
+          metrics.updateGaugeValue(activeMinerGuage, [workerName, address, Math.floor(stats.lastShare / 1000).toString(), stats.asicType], status);
         });
       });
 

@@ -287,6 +287,8 @@ export class SharesManager {
   startVardiffThread(expectedShareRate: number, clamp: boolean): void {
     var windows: number[] = [1, 3, 10, 30, 60, 240, 0];
     var tolerances: number[] = [1, 0.5, 0.25, 0.15, 0.1, 0.05, 0.05];
+    // Dampening factors only for later windows to maintain quick initial adjustments
+    var dampening: number[] = [1, 1, 1, 0.7, 0.5, 0.3, 0.2];
 
     setInterval(async () => {
       await this.sleep(varDiffThreadSleep * 1000);
@@ -322,50 +324,55 @@ export class SharesManager {
           var shareRateRatio: number = shareRate / expectedShareRate;
           var window: number = windows[workerStats.varDiffWindow];
           var tolerance: number = tolerances[workerStats.varDiffWindow];
+          var currentDampening: number = dampening[workerStats.varDiffWindow];
 
           statsLines = statsLines.concat(
             ` ${workerName.padEnd(14)}| ${diff.toFixed(2).padStart(11)} | ${window.toString().padStart(8)} | ${duration.toFixed(2).padStart(10)} | ${shares.toString().padStart(11)} | ${shareRate.toFixed(2).padStart(9)}\n`
           );
 
+          const deviation = Math.abs(1 - shareRateRatio);
+
           // check final stage first, as this is where majority of time spent
           if (window == 0) {
-            if (Math.abs(1 - shareRateRatio) >= tolerance) {
+            if (deviation >= tolerance) {
               toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance * 100}%)`);
-              this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
+              // Apply dampening only in final window for stability
+              const adjustedRatio = 1 + (shareRateRatio - 1) * currentDampening;
+              this.updateVarDiff(workerStats, diff * adjustedRatio, clamp, false);
             }
             continue;
           }
 
-          // check all previously cleared windows
-          var i: number = 1;
-          for (; i < workerStats.varDiffWindow;) {
-            if (Math.abs(1 - shareRateRatio) >= tolerances[i]) {
-              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
-              this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
-              break;
-            }
-            i++;
-          }
-          if (i < workerStats.varDiffWindow) {
-            continue;
-          }
-
-          // check for current window max exception
-          if (shares >= window * expectedShareRate * (1 + tolerance)) {
-            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
-            this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
-            continue;
-          }
-
-          // check whether we've exceeded window length
+          // For all other windows
           if (duration >= window) {
-            // check for current window min exception
-            if (shares <= window * expectedShareRate * (1 - tolerance)) {
-              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
-              this.updateVarDiff(workerStats, diff * Math.max(shareRateRatio, 0.1), clamp);
-              continue;
+            if (deviation >= tolerance) {
+              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded tolerance (+/- ${tolerance * 100}%) for ${window}m window`);
+              
+              // Only apply dampening in later windows (30m+)
+              const adjustedRatio = workerStats.varDiffWindow >= 3 
+                ? 1 + (shareRateRatio - 1) * currentDampening
+                : shareRateRatio;
+              
+              // Reset to window 0 only for significant deviations in early windows
+              const shouldReset = workerStats.varDiffWindow < 3 
+                ? deviation >= (tolerance * 2)  // More aggressive reset in early windows
+                : deviation >= (tolerance * 4); // Much higher threshold for later windows
+              
+              this.updateVarDiff(workerStats, diff * adjustedRatio, clamp, shouldReset);
+              
+              if (shouldReset && DEBUG) {
+                this.monitoring.debug(`SharesManager: Large deviation detected (${deviation.toFixed(2)}), resetting window for ${workerName}`);
+              }
+            } else {
+              // Progress to next window if stable
+              if (workerStats.varDiffWindow < windows.length - 1) {
+                workerStats.varDiffWindow++;
+                workerStats.varDiffStartTime = Date.now();
+                if (DEBUG) {
+                  this.monitoring.debug(`SharesManager: ${workerName} progressed to window ${workerStats.varDiffWindow} (${windows[workerStats.varDiffWindow]}m)`);
+                }
+              }
             }
-            workerStats.varDiffWindow++;
           }
         }
       }
@@ -384,24 +391,35 @@ export class SharesManager {
   startVarDiff(stats: WorkerStats) {
   	if (stats.varDiffStartTime  == zeroDateMillS) {
   		stats.varDiffSharesFound = 0
+  		
   		stats.varDiffStartTime = Date.now()
   	}
   }
 
   // update vardiff with new mindiff, reset counters, and disable tracker until
   // client handler restarts it while sending diff on next block
-  updateVarDiff(stats : WorkerStats, minDiff: number, clamp: boolean): number {
+  updateVarDiff(stats: WorkerStats, minDiff: number, clamp: boolean, resetWindow: boolean = true): number {
     if (clamp) {
       minDiff = Math.pow(2, Math.floor(Math.log2(minDiff)))
     }
 
     var previousMinDiff = stats.minDiff
-    var newMinDiff = Math.max(64, minDiff)
+    var newMinDiff = Math.max(64, Math.min(131072, minDiff))
+    
     if (newMinDiff != previousMinDiff) {
       this.monitoring.log(`updating vardiff to ${newMinDiff} for client ${stats.workerName}`)
-      stats.varDiffStartTime = zeroDateMillS
-      stats.varDiffWindow = 0
-      stats.minDiff = Math.min(131072, newMinDiff)
+      
+      if (resetWindow) {
+        stats.varDiffStartTime = zeroDateMillS
+        stats.varDiffWindow = 0
+        stats.varDiffSharesFound = 0
+      } else {
+        // Keep the window but reset the start time and shares for the current window
+        stats.varDiffStartTime = Date.now()
+        stats.varDiffSharesFound = 0
+      }
+      
+      stats.minDiff = newMinDiff
       varDiff.labels(stats.workerName).set(stats.minDiff);
     }
     return previousMinDiff

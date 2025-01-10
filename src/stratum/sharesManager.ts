@@ -22,6 +22,7 @@ import { metrics } from '../../index';
 // Fix the import statement
 import Denque from 'denque';
 import { Encoding } from './templates/jobs/encoding';
+import config from '../../config/config.json'
 
 export interface WorkerStats {
   blocksFound: number;
@@ -397,12 +398,12 @@ export class SharesManager {
     }
 
     var previousMinDiff = stats.minDiff
-    var newMinDiff = Math.max(64, minDiff)
+    var newMinDiff = Math.max(config.stratum.minDiff, Math.min(config.stratum.maxDiff, minDiff))
     if (newMinDiff != previousMinDiff) {
       this.monitoring.log(`updating vardiff to ${newMinDiff} for client ${stats.workerName}`)
       stats.varDiffStartTime = zeroDateMillS
       stats.varDiffWindow = 0
-      stats.minDiff = Math.min(131072, newMinDiff)
+      stats.minDiff = newMinDiff
       varDiff.labels(stats.workerName).set(stats.minDiff);
     }
     return previousMinDiff

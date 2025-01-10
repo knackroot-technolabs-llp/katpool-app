@@ -187,7 +187,6 @@ export class SharesManager {
           const workerRate = getAverageHashrateGHs(stats);
           rate += workerRate;
           metrics.updateGaugeValue(workerHashRateGauge, [workerName, address], workerRate);
-          totalRate += rate;
           const rateStr = stringifyHashrate(workerRate);
           const ratioStr = `${stats.sharesFound}/${stats.staleShares}/${stats.invalidShares}`;
           lines.push(
@@ -200,6 +199,7 @@ export class SharesManager {
           metrics.updateGaugeValue(activeMinerGuage, [workerName, address, stats.asicType], status);
         });
         metrics.updateGaugeValue(minerHashRateGauge, [address], rate);
+        totalRate += rate;
       });
 
       lines.sort();

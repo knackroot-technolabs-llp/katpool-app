@@ -13,7 +13,7 @@
       "cacheSize": 300
     },
     "difficulty": 2048,
-    "sharesPerMinute": 10,
+    "sharesPerMinute": 20,
     "extraNonceSize": 2, 
     "clampPow2": true,
     "varDiff": true

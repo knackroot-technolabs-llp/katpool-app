@@ -195,8 +195,8 @@ export class SharesManager {
 
           // Update worker's hashrate in workerStats
           stats.hashrate = workerRate;
-          const status = Date.now() - 600000 >= stats.lastShare ? 1 : 0; // Submission within last 10 minutes                 
-          metrics.updateGaugeValue(activeMinerGuage, [workerName, address, Math.floor(stats.lastShare / 1000).toString(), stats.asicType], status);
+          const status = Date.now() - 600000 >= stats.lastShare ? Math.floor(stats.lastShare / 1000) : 0; // Submission within last 10 minutes                 
+          metrics.updateGaugeValue(activeMinerGuage, [workerName, address, stats.asicType], status);
         });
         metrics.updateGaugeValue(minerHashRateGauge, [address], rate);
       });

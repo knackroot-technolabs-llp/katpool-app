@@ -191,7 +191,7 @@ export default class Stratum extends EventEmitter {
           
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
 
-          metrics.updateGaugeValue(activeMinerGuage, [name, address, Math.floor(Date.now() / 1000).toString(), socket.data.asicType], 1);
+          metrics.updateGaugeValue(activeMinerGuage, [name, address, socket.data.asicType], Math.floor(Date.now() / 1000));
           break;
         }
         case 'mining.submit': {

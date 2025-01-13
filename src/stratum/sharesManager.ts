@@ -395,11 +395,27 @@ export class SharesManager {
   // client handler restarts it while sending diff on next block
   updateVarDiff(stats : WorkerStats, minDiff: number, clamp: boolean): number {
     if (clamp) {
-      minDiff = Math.pow(2, Math.floor(Math.log2(minDiff)))
+      minDiff = Math.pow(2, Math.ceil(Math.log2(minDiff)))
     }
 
-    var previousMinDiff = stats.minDiff
-    var newMinDiff = Math.max(config.stratum.minDiff, Math.min(config.stratum.maxDiff, minDiff))
+    let previousMinDiff = stats.minDiff
+    let minimumDiff = config.stratum.minDiff
+
+    if (stats.asicType === AsicType.Bitmain || stats.asicType === AsicType.GoldShell) {
+      minimumDiff = 512
+    }
+
+    let newMinDiff = Math.max(minimumDiff, Math.min(config.stratum.maxDiff, minDiff))
+    if (stats.sharesFound < stats.invalidShares) {
+      if (stats.asicType == AsicType.Bitmain) {
+        newMinDiff = 16384
+      } else if (stats.asicType == AsicType.IceRiver) {
+        newMinDiff = 512
+      } else if (stats.asicType == AsicType.GoldShell) {
+        newMinDiff = 2048
+      } 
+    }
+
     if (newMinDiff != previousMinDiff) {
       this.monitoring.log(`updating vardiff to ${newMinDiff} for client ${stats.workerName}`)
       stats.varDiffStartTime = zeroDateMillS

@@ -286,19 +286,19 @@ export class SharesManager {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  startVardiffThread(expectedShareRate: number, clamp: boolean): void {
-    var windows: number[] = [1, 3, 10, 30, 60, 240, 0];
-    var tolerances: number[] = [1, 0.5, 0.25, 0.15, 0.1, 0.1, 0.1];
+  async startVardiffThread(expectedShareRate: number, clamp: boolean): Promise<void> {
+    let windows: number[] = [1, 3, 10, 30, 60, 240, 0];
+    let tolerances: number[] = [1, 0.5, 0.25, 0.15, 0.1, 0.1, 0.1];
 
-    setInterval(async () => {
+    const executeVardiff = async () => {
       await this.sleep(varDiffThreadSleep * 1000);
 
-      var stats: string = "\n=== vardiff ===================================================================\n\n";
+      let stats = "\n=== vardiff ===================================================================\n\n";
       stats += "  worker name  |    diff     |  window  |  elapsed   |    shares   |   rate    \n";
       stats += "-------------------------------------------------------------------------------\n";
 
-      var statsLines: string[] = [];
-      var toleranceErrs: string[] = [];
+      let statsLines: string[] = [];
+      let toleranceErrs: string[] = [];
 
       for (const [address, minerData] of this.miners) {
         if (!minerData || !minerData.workerStats) {
@@ -312,50 +312,44 @@ export class SharesManager {
             continue;
           }
 
-          if (workerStats.varDiffStartTime == zeroDateMillS) {
-            toleranceErrs = toleranceErrs.concat(toleranceErrs, `no diff sent to client ${workerName}`);
+          if (workerStats.varDiffStartTime === zeroDateMillS) {
+            toleranceErrs.push(`no diff sent to client ${workerName}`);
             continue;
           }
 
-          var diff: number = workerStats.minDiff;
-          var shares: number = workerStats.varDiffSharesFound;
-          var duration: number = (Date.now() - workerStats.varDiffStartTime) / 60000;
-          var shareRate: number = shares / duration;
-          var shareRateRatio: number = shareRate / expectedShareRate;
-          var windowIndex: number = workerStats.varDiffWindow % windows.length;
-          var window: number = windows[windowIndex];
-          var tolerance: number = tolerances[windowIndex]; 
+          const diff = workerStats.minDiff;
+          const shares = workerStats.varDiffSharesFound;
+          const duration = Math.max((Date.now() - workerStats.varDiffStartTime) / 60000, 1); // Prevent very small values
+          const shareRate = shares / duration;
+          const shareRateRatio = shareRate / expectedShareRate;
+          const windowIndex = workerStats.varDiffWindow % windows.length;
+          const window = windows[windowIndex];
+          const tolerance = tolerances[windowIndex]; 
 
-          statsLines = statsLines.concat(
+          statsLines.push(
             ` ${workerName.padEnd(14)}| ${diff.toFixed(2).padStart(11)} | ${window.toString().padStart(8)} | ${duration.toFixed(2).padStart(10)} | ${shares.toString().padStart(11)} | ${shareRate.toFixed(2).padStart(9)}\n`
           );
 
           // check final stage first, as this is where majority of time spent
-          if (window == 0) {
+          if (window === 0) {
             if (Math.abs(1 - shareRateRatio) >= tolerance) {
-              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance * 100}%)`);
+              toleranceErrs.push(`${workerName} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance * 100}%)`);
               this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
             }
             continue;
           }
 
-          // check all previously cleared windows
-          var i: number = 1;
-          for (; i < workerStats.varDiffWindow;) {
+          for (let i = 1; i < workerStats.varDiffWindow; i++) {
             if (Math.abs(1 - shareRateRatio) >= tolerances[i]) {
-              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
+              toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
               this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
               break;
             }
-            i++;
-          }
-          if (i < workerStats.varDiffWindow) {
-            continue;
           }
 
           // check for current window max exception
           if (shares >= window * expectedShareRate * (1 + tolerance)) {
-            toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
+            toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[workerStats.varDiffWindow] * 100}%) for ${windows[workerStats.varDiffWindow]}m window`);
             this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
             continue;
           }
@@ -364,11 +358,11 @@ export class SharesManager {
           if (duration >= window) {
             // check for current window min exception
             if (shares <= window * expectedShareRate * (1 - tolerance)) {
-              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
+              toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[workerStats.varDiffWindow] * 100}%) for ${windows[workerStats.varDiffWindow]}m window`);
               this.updateVarDiff(workerStats, diff * Math.max(shareRateRatio, 0.1), clamp);
-              continue;
+            } else {
+              workerStats.varDiffWindow++;
             }
-            workerStats.varDiffWindow++;
           }
         }
       }
@@ -376,11 +370,17 @@ export class SharesManager {
       statsLines.sort();
       stats += statsLines + "\n";
       stats += `\n\n===============================================================================\n`;
-      stats += `\n${toleranceErrs}\n\n\n`;
+      stats += `\n${toleranceErrs.join('\n')}\n\n\n`;
       if (DEBUG) {
         this.monitoring.debug(stats);
       }
-    }, varDiffThreadSleep * 1000);
+
+      // Schedule the next execution after the current one is complete
+      setTimeout(executeVardiff, varDiffThreadSleep * 1000);
+    };
+
+    // Start the execution loop
+    executeVardiff();
   }
 
   // (re)start vardiff tracker

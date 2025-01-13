@@ -2,6 +2,7 @@ import type { Socket, TCPSocketListener } from 'bun'
 import { parseMessage, type Request, type Response } from './protocol'
 import { Encoding } from '../templates/jobs/encoding'
 import Monitoring from '../../monitoring'
+import { AsicType } from '..'
 
 export type Worker = {
   address: string,
@@ -13,7 +14,7 @@ export type Miner = {
   extraNonce: string
   workers: Map<string, Worker>
   encoding: Encoding
-  asicType: string 
+  asicType: AsicType 
   cachedBytes: string
 }
 
@@ -50,7 +51,7 @@ export default class Server {
       workers: new Map(),
       encoding: Encoding.BigHeader,
       cachedBytes: "",
-      asicType: "",
+      asicType: AsicType.Unknown,
     }
   }
 

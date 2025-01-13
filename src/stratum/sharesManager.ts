@@ -23,6 +23,7 @@ import { metrics } from '../../index';
 import Denque from 'denque';
 import { Encoding } from './templates/jobs/encoding';
 import config from '../../config/config.json'
+import { AsicType } from '.';
 
 export interface WorkerStats {
   blocksFound: number;
@@ -39,7 +40,7 @@ export interface WorkerStats {
   minDiff: number;
   recentShares: Denque<{ timestamp: number, difficulty: number}>;
   hashrate: number; // Added hashrate property
-  asicType: string;
+  asicType: AsicType;
 }
 
 type MinerData = {
@@ -92,7 +93,7 @@ export class SharesManager {
         minDiff: 128, // Initial difficulty
         recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(),
         hashrate: 0,
-        asicType: "",
+        asicType: AsicType.Unknown,
       };
       minerData.workerStats.set(workerName, workerStats);
       if (DEBUG) this.monitoring.debug(`SharesManager: Created new worker stats for ${workerName}`);
@@ -384,7 +385,7 @@ export class SharesManager {
 
   // (re)start vardiff tracker
   startVarDiff(stats: WorkerStats) {
-    if (stats.varDiffStartTime  == zeroDateMillS) {
+    if (stats.varDiffStartTime  === zeroDateMillS) {
       stats.varDiffSharesFound = 0
       stats.varDiffStartTime = Date.now()
     }

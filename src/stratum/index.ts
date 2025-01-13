@@ -53,7 +53,12 @@ export default class Stratum extends EventEmitter {
     const clampPow2 = config.stratum.clampPow2 || true; // Enable clamping difficulty to powers of 2
     const varDiff = config.stratum.varDiff || false; // Enable variable difficulty
     if (varDiff)
-      this.sharesManager.startVardiffThread(sharesPerMin, clampPow2);
+      this.sharesManager.startVardiffThread(sharesPerMin, clampPow2).then(() => {
+        this.monitoring.log("VarDiff thread started successfully.");
+      })
+      .catch((err) => {
+        this.monitoring.error(`Failed to start VarDiff thread: ${err}`);
+      });;
 
     this.extraNonceSize = Math.min(Number(config.stratum.extraNonceSize), 3 ) || 0;
     // this.maxExtranonce = Math.pow(2, 8 * Math.min(this.extraNonceSize, 3)) - 1;

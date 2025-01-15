@@ -7,7 +7,7 @@ import type Templates from './templates/index.ts';
 import { Address, type IRawHeader } from "../../wasm/kaspa";
 import { Encoding, encodeJob } from './templates/jobs/encoding.ts';
 import { SharesManager } from './sharesManager';
-import { minerjobSubmissions, jobsNotFound, activeMinerGuage } from '../prometheus'
+import { minerjobSubmissions, jobsNotFound, activeMinerGuage, varDiff } from '../prometheus'
 import Monitoring from '../monitoring/index.ts';
 import { DEBUG } from '../../index'
 import { Mutex } from 'async-mutex';
@@ -18,6 +18,14 @@ import config from "../../config/config.json";
 
 const bitMainRegex = new RegExp(".*(GodMiner).*", "i")
 const iceRiverRegex = new RegExp(".*(IceRiverMiner).*", "i")
+const goldShellRegex = new RegExp(".*(BzMiner).*", "i")
+
+export enum AsicType {
+  IceRiver = "IceRiver",
+  Bitmain = "Bitmain",
+  GoldShell = "GoldShell",
+  Unknown = ""
+}
 
 export default class Stratum extends EventEmitter {
   server: Server;
@@ -45,7 +53,12 @@ export default class Stratum extends EventEmitter {
     const clampPow2 = config.stratum.clampPow2 || true; // Enable clamping difficulty to powers of 2
     const varDiff = config.stratum.varDiff || false; // Enable variable difficulty
     if (varDiff)
-      this.sharesManager.startVardiffThread(sharesPerMin, clampPow2);
+      this.sharesManager.startVardiffThread(sharesPerMin, clampPow2).then(() => {
+        this.monitoring.log("VarDiff thread started successfully.");
+      })
+      .catch((err) => {
+        this.monitoring.error(`Failed to start VarDiff thread: ${err}`);
+      });;
 
     this.extraNonceSize = Math.min(Number(config.stratum.extraNonceSize), 3 ) || 0;
     // this.maxExtranonce = Math.pow(2, 8 * Math.min(this.extraNonceSize, 3)) - 1;
@@ -72,7 +85,7 @@ export default class Stratum extends EventEmitter {
         this.subscriptors.delete(socket);
       } else {      
         socket.data.workers.forEach((worker, _) => {
-          var varDiff = this.sharesManager.getClientVardiff(worker)
+          let varDiff = this.sharesManager.getClientVardiff(worker)
 				  if (varDiff != socket.data.difficulty && varDiff != 0) {
             this.monitoring.log(`Stratum: Updating VarDiff for ${worker.name} from ${socket.data.difficulty} to ${varDiff}`);
             this.sharesManager.updateSocketDifficulty(worker.address, worker.name, varDiff);
@@ -126,11 +139,13 @@ export default class Stratum extends EventEmitter {
           }   
           if (bitMainRegex.test(minerType)) {
             socket.data.encoding = Encoding.Bitmain;
-            socket.data.asicType = "Bitmain";
+            socket.data.asicType = AsicType.Bitmain;
             response.result = [null, socket.data.extraNonce, 8 - Math.floor(socket.data.extraNonce.length / 2)];
           } else if (iceRiverRegex.test(minerType)) {
-            socket.data.asicType = "IceRiver";
-          } 
+            socket.data.asicType = AsicType.IceRiver;
+          } else if (goldShellRegex.test(minerType)) {
+            socket.data.asicType = AsicType.GoldShell;
+          }
           this.subscriptors.add(socket);        
           this.emit('subscription', socket.remoteAddress, request.params[0]);
           this.monitoring.log(`Stratum: Miner subscribed from ${socket.remoteAddress}`);
@@ -188,10 +203,11 @@ export default class Stratum extends EventEmitter {
           const workerStats = minerData.workerStats.get(worker.name)!;
           socket.data.difficulty = workerStats.minDiff;
           this.reflectDifficulty(socket, worker.name);
+          varDiff.labels(worker.name).set(workerStats.minDiff);
           
           if (DEBUG) this.monitoring.debug(`Stratum: Authorizing worker - Address: ${address}, Worker Name: ${name}`);
 
-          metrics.updateGaugeValue(activeMinerGuage, [name, address, Math.floor(Date.now() / 1000).toString(), socket.data.asicType], 1);
+          metrics.updateGaugeValue(activeMinerGuage, [name, address, socket.data.asicType], Math.floor(Date.now() / 1000));
           break;
         }
         case 'mining.submit': {
@@ -230,7 +246,7 @@ export default class Stratum extends EventEmitter {
 
             try {
               let nonce: bigint;
-              if (socket.data.encoding == Encoding.Bitmain) {
+              if (socket.data.encoding === Encoding.Bitmain) {
                 nonce = BigInt(request.params[2]);
               } else {
                 nonce = BigInt('0x' + request.params[2]);

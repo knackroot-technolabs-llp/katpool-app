@@ -62,7 +62,7 @@ export default class Templates {
     })
     metrics.updateGaugeInc(minedBlocksGauge, [minerId, this.address]);
     
-    if (report.report.type == "success") {
+    if (report.report.type === "success") {
       metrics.updateGaugeInc(paidBlocksGauge, [minerId, this.address]);
       metrics.updateGaugeValue(successBlocksDetailsGauge, [minerId, this.address, newHash, template.header.daaScore.toString()], Date.now());
       if (DEBUG) this.monitoring.debug(`Templates: the block by miner ${minerId} has been accepted with hash : ${newHash}`)

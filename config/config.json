@@ -16,7 +16,9 @@
     "sharesPerMinute": 10,
     "extraNonceSize": 2, 
     "clampPow2": true,
-    "varDiff": true
+    "varDiff": true,
+    "minDiff": 64,
+    "maxDiff": 131072
   },
   "treasury": {
     "fee": 0

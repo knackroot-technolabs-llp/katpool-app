@@ -22,6 +22,8 @@ import { metrics } from '../../index';
 // Fix the import statement
 import Denque from 'denque';
 import { Encoding } from './templates/jobs/encoding';
+import config from '../../config/config.json'
+import { AsicType } from '.';
 
 export interface WorkerStats {
   blocksFound: number;
@@ -38,7 +40,7 @@ export interface WorkerStats {
   minDiff: number;
   recentShares: Denque<{ timestamp: number, difficulty: number}>;
   hashrate: number; // Added hashrate property
-  asicType: string;
+  asicType: AsicType;
 }
 
 type MinerData = {
@@ -91,7 +93,7 @@ export class SharesManager {
         minDiff: 128, // Initial difficulty
         recentShares: new Denque<{ timestamp: number, difficulty: number, workerName: string }>(),
         hashrate: 0,
-        asicType: "",
+        asicType: AsicType.Unknown,
       };
       minerData.workerStats.set(workerName, workerStats);
       if (DEBUG) this.monitoring.debug(`SharesManager: Created new worker stats for ${workerName}`);
@@ -186,7 +188,6 @@ export class SharesManager {
           const workerRate = getAverageHashrateGHs(stats);
           rate += workerRate;
           metrics.updateGaugeValue(workerHashRateGauge, [workerName, address], workerRate);
-          totalRate += rate;
           const rateStr = stringifyHashrate(workerRate);
           const ratioStr = `${stats.sharesFound}/${stats.staleShares}/${stats.invalidShares}`;
           lines.push(
@@ -195,10 +196,11 @@ export class SharesManager {
 
           // Update worker's hashrate in workerStats
           stats.hashrate = workerRate;
-          const status = Date.now() - 600000 >= stats.lastShare ? 1 : 0; // Submission within last 10 minutes                 
-          metrics.updateGaugeValue(activeMinerGuage, [workerName, address, Math.floor(stats.lastShare / 1000).toString(), stats.asicType], status);
+          const status = Date.now() - stats.lastShare <= 600000 ? Math.floor(stats.lastShare / 1000) : 0;
+          metrics.updateGaugeValue(activeMinerGuage, [workerName, address, stats.asicType], status);
         });
         metrics.updateGaugeValue(minerHashRateGauge, [address], rate);
+        totalRate += rate;
       });
 
       lines.sort();
@@ -284,21 +286,19 @@ export class SharesManager {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  startVardiffThread(expectedShareRate: number, clamp: boolean): void {
-    var windows: number[] = [1, 3, 10, 30, 60, 240, 0];
-    var tolerances: number[] = [1, 0.5, 0.25, 0.15, 0.1, 0.05, 0.05];
-    // Dampening factors only for later windows to maintain quick initial adjustments
-    var dampening: number[] = [1, 1, 1, 0.7, 0.5, 0.3, 0.2];
+  async startVardiffThread(expectedShareRate: number, clamp: boolean): Promise<void> {
+    let windows: number[] = [1, 3, 10, 30, 60, 240, 0];
+    let tolerances: number[] = [1, 0.5, 0.25, 0.15, 0.1, 0.1, 0.1];
 
-    setInterval(async () => {
+    const executeVardiff = async () => {
       await this.sleep(varDiffThreadSleep * 1000);
 
-      var stats: string = "\n=== vardiff ===================================================================\n\n";
+      let stats = "\n=== vardiff ===================================================================\n\n";
       stats += "  worker name  |    diff     |  window  |  elapsed   |    shares   |   rate    \n";
       stats += "-------------------------------------------------------------------------------\n";
 
-      var statsLines: string[] = [];
-      var toleranceErrs: string[] = [];
+      let statsLines: string[] = [];
+      let toleranceErrs: string[] = [];
 
       for (const [address, minerData] of this.miners) {
         if (!minerData || !minerData.workerStats) {
@@ -312,66 +312,56 @@ export class SharesManager {
             continue;
           }
 
-          if (workerStats.varDiffStartTime == zeroDateMillS) {
-            toleranceErrs = toleranceErrs.concat(toleranceErrs, `no diff sent to client ${workerName}`);
+          if (workerStats.varDiffStartTime === zeroDateMillS) {
+            toleranceErrs.push(`no diff sent to client ${workerName}`);
             continue;
           }
 
-          var diff: number = workerStats.minDiff;
-          var shares: number = workerStats.varDiffSharesFound;
-          var duration: number = (Date.now() - workerStats.varDiffStartTime) / 60000;
-          var shareRate: number = shares / duration;
-          var shareRateRatio: number = shareRate / expectedShareRate;
-          var window: number = windows[workerStats.varDiffWindow];
-          var tolerance: number = tolerances[workerStats.varDiffWindow];
-          var currentDampening: number = dampening[workerStats.varDiffWindow];
+          const diff = workerStats.minDiff;
+          const shares = workerStats.varDiffSharesFound;
+          const duration = Math.max((Date.now() - workerStats.varDiffStartTime) / 60000, 1); // Prevent very small values
+          const shareRate = shares / duration;
+          const shareRateRatio = shareRate / expectedShareRate;
+          const windowIndex = workerStats.varDiffWindow % windows.length;
+          const window = windows[windowIndex];
+          const tolerance = tolerances[windowIndex]; 
 
-          statsLines = statsLines.concat(
+          statsLines.push(
             ` ${workerName.padEnd(14)}| ${diff.toFixed(2).padStart(11)} | ${window.toString().padStart(8)} | ${duration.toFixed(2).padStart(10)} | ${shares.toString().padStart(11)} | ${shareRate.toFixed(2).padStart(9)}\n`
           );
 
-          const deviation = Math.abs(1 - shareRateRatio);
-
           // check final stage first, as this is where majority of time spent
-          if (window == 0) {
-            if (deviation >= tolerance) {
-              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance * 100}%)`);
-              // Apply dampening only in final window for stability
-              const adjustedRatio = 1 + (shareRateRatio - 1) * currentDampening;
-              this.updateVarDiff(workerStats, diff * adjustedRatio, clamp, false);
+          if (window === 0) {
+            if (Math.abs(1 - shareRateRatio) >= tolerance) {
+              toleranceErrs.push(`${workerName} final share rate ${shareRate} exceeded tolerance (+/- ${tolerance * 100}%)`);
+              this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
             }
             continue;
           }
 
-          // For all other windows
+          for (let i = 1; i < workerStats.varDiffWindow; i++) {
+            if (Math.abs(1 - shareRateRatio) >= tolerances[i]) {
+              toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
+              this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
+              break;
+            }
+          }
+
+          // check for current window max exception
+          if (shares >= window * expectedShareRate * (1 + tolerance)) {
+            toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[workerStats.varDiffWindow] * 100}%) for ${windows[workerStats.varDiffWindow]}m window`);
+            this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
+            continue;
+          }
+
+          // check whether we've exceeded window length
           if (duration >= window) {
-            if (deviation >= tolerance) {
-              toleranceErrs = toleranceErrs.concat(toleranceErrs, `${workerName} share rate ${shareRate} exceeded tolerance (+/- ${tolerance * 100}%) for ${window}m window`);
-              
-              // Only apply dampening in later windows (30m+)
-              const adjustedRatio = workerStats.varDiffWindow >= 3 
-                ? 1 + (shareRateRatio - 1) * currentDampening
-                : shareRateRatio;
-              
-              // Reset to window 0 only for significant deviations in early windows
-              const shouldReset = workerStats.varDiffWindow < 3 
-                ? deviation >= (tolerance * 2)  // More aggressive reset in early windows
-                : deviation >= (tolerance * 4); // Much higher threshold for later windows
-              
-              this.updateVarDiff(workerStats, diff * adjustedRatio, clamp, shouldReset);
-              
-              if (shouldReset && DEBUG) {
-                this.monitoring.debug(`SharesManager: Large deviation detected (${deviation.toFixed(2)}), resetting window for ${workerName}`);
-              }
+            // check for current window min exception
+            if (shares <= window * expectedShareRate * (1 - tolerance)) {
+              toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[workerStats.varDiffWindow] * 100}%) for ${windows[workerStats.varDiffWindow]}m window`);
+              this.updateVarDiff(workerStats, diff * Math.max(shareRateRatio, 0.1), clamp);
             } else {
-              // Progress to next window if stable
-              if (workerStats.varDiffWindow < windows.length - 1) {
-                workerStats.varDiffWindow++;
-                workerStats.varDiffStartTime = Date.now();
-                if (DEBUG) {
-                  this.monitoring.debug(`SharesManager: ${workerName} progressed to window ${workerStats.varDiffWindow} (${windows[workerStats.varDiffWindow]}m)`);
-                }
-              }
+              workerStats.varDiffWindow++;
             }
           }
         }
@@ -380,45 +370,56 @@ export class SharesManager {
       statsLines.sort();
       stats += statsLines + "\n";
       stats += `\n\n===============================================================================\n`;
-      stats += `\n${toleranceErrs}\n\n\n`;
+      stats += `\n${toleranceErrs.join('\n')}\n\n\n`;
       if (DEBUG) {
         this.monitoring.debug(stats);
       }
-    }, varDiffThreadSleep * 1000);
+
+      // Schedule the next execution after the current one is complete
+      setTimeout(executeVardiff, varDiffThreadSleep * 1000);
+    };
+
+    // Start the execution loop
+    executeVardiff();
   }
 
   // (re)start vardiff tracker
   startVarDiff(stats: WorkerStats) {
-  	if (stats.varDiffStartTime  == zeroDateMillS) {
-  		stats.varDiffSharesFound = 0
-  		
-  		stats.varDiffStartTime = Date.now()
-  	}
+    if (stats.varDiffStartTime  === zeroDateMillS) {
+      stats.varDiffSharesFound = 0
+      stats.varDiffStartTime = Date.now()
+    }
   }
 
   // update vardiff with new mindiff, reset counters, and disable tracker until
   // client handler restarts it while sending diff on next block
-  updateVarDiff(stats: WorkerStats, minDiff: number, clamp: boolean, resetWindow: boolean = true): number {
+  updateVarDiff(stats : WorkerStats, minDiff: number, clamp: boolean): number {
     if (clamp) {
-      minDiff = Math.pow(2, Math.floor(Math.log2(minDiff)))
+      minDiff = Math.pow(2, Math.ceil(Math.log2(minDiff)))
     }
 
-    var previousMinDiff = stats.minDiff
-    var newMinDiff = Math.max(64, Math.min(131072, minDiff))
-    
+    let previousMinDiff = stats.minDiff
+    let minimumDiff = config.stratum.minDiff
+
+    if (stats.asicType === AsicType.Bitmain || stats.asicType === AsicType.GoldShell) {
+      minimumDiff = 512
+    }
+
+    let newMinDiff = Math.max(minimumDiff, Math.min(config.stratum.maxDiff, minDiff))
+    if (stats.sharesFound < stats.invalidShares) {
+      if (stats.asicType == AsicType.Bitmain) {
+        newMinDiff = 16384
+      } else if (stats.asicType == AsicType.IceRiver) {
+        newMinDiff = 512
+      } else if (stats.asicType == AsicType.GoldShell) {
+        newMinDiff = 2048
+      } 
+    }
+
     if (newMinDiff != previousMinDiff) {
       this.monitoring.log(`updating vardiff to ${newMinDiff} for client ${stats.workerName}`)
-      
-      if (resetWindow) {
-        stats.varDiffStartTime = zeroDateMillS
-        stats.varDiffWindow = 0
-        stats.varDiffSharesFound = 0
-      } else {
-        // Keep the window but reset the start time and shares for the current window
-        stats.varDiffStartTime = Date.now()
-        stats.varDiffSharesFound = 0
-      }
-      
+      stats.varDiffStartTime = zeroDateMillS
+      stats.varDiffWindow = 0
       stats.minDiff = newMinDiff
       varDiff.labels(stats.workerName).set(stats.minDiff);
     }
@@ -427,9 +428,9 @@ export class SharesManager {
 
   startClientVardiff(worker: Worker) {
     const stats = this.getOrCreateWorkerStats(worker.name, this.miners.get(worker.address)!);
-  	this.startVarDiff(stats)
+    this.startVarDiff(stats)
   }
-  
+
   getClientVardiff(worker: Worker): number {
     const minerData = this.miners.get(worker.address);
     if (!minerData) {

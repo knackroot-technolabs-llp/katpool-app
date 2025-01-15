@@ -19,7 +19,7 @@ export const minerHashRateGauge = new Gauge({
 export const activeMinerGuage = new Gauge({
   name: 'active_workers_10m_count',
   help: 'Active workers data',
-  labelNames: ['miner_id', 'wallet_address', 'timestamp', 'asic_type']
+  labelNames: ['miner_id', 'wallet_address', 'asic_type']
 });
 
 export const workerHashRateGauge = new Gauge({

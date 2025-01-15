@@ -307,8 +307,8 @@ export class SharesManager {
         }
 
         for (const [workerName, workerStats] of minerData.workerStats) {
-          if (!workerStats) {
-            if (DEBUG) this.monitoring.debug(`SharesManager: Invalid worker stats for worker ${workerName}`);
+          if (!workerStats || !workerStats.workerName) {
+            if (DEBUG) this.monitoring.debug(`SharesManager: Invalid worker stats or worker name for worker ${workerName}`);
             continue;
           }
 
@@ -327,7 +327,7 @@ export class SharesManager {
           const tolerance = tolerances[windowIndex]; 
 
           statsLines.push(
-            ` ${workerName.padEnd(14)}| ${diff.toFixed(2).padStart(11)} | ${window.toString().padStart(8)} | ${duration.toFixed(2).padStart(10)} | ${shares.toString().padStart(11)} | ${shareRate.toFixed(2).padStart(9)}\n`
+            ` ${workerStats.workerName.padEnd(14)}| ${diff.toFixed(2).padStart(11)} | ${window.toString().padStart(8)} | ${duration.toFixed(2).padStart(10)} | ${shares.toString().padStart(11)} | ${shareRate.toFixed(2).padStart(9)}\n`
           );
 
           // check final stage first, as this is where majority of time spent

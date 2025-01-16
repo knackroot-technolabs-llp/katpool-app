@@ -339,12 +339,20 @@ export class SharesManager {
             continue;
           }
 
-          for (let i = 1; i < workerStats.varDiffWindow; i++) {
+          // check all previously cleared windows
+          let i: number = 1;
+          for (; i < workerStats.varDiffWindow;) {
             if (Math.abs(1 - shareRateRatio) >= tolerances[i]) {
+              // breached tolerance of previously cleared window
               toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
               this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
               break;
             }
+            i++;
+          }
+          if (i < workerStats.varDiffWindow) {
+            // should only happen if we broke previous loop
+            continue;
           }
 
           // check for current window max exception

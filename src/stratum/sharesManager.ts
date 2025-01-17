@@ -317,13 +317,13 @@ export class SharesManager {
             continue;
           }
 
-          if (workerStats.asicType == AsicType.Bitmain) {
-            expectedShareRate = 20
-          } else if (workerStats.asicType == AsicType.IceRiver) {
-            expectedShareRate = 10
-          } else if (workerStats.asicType == AsicType.GoldShell) {
-            expectedShareRate = 15
-          }
+          // if (workerStats.asicType == AsicType.Bitmain) {
+          //   expectedShareRate = 20
+          // } else if (workerStats.asicType == AsicType.IceRiver) {
+          //   expectedShareRate = 10
+          // } else if (workerStats.asicType == AsicType.GoldShell) {
+          //   expectedShareRate = 15
+          // }
 
           const diff = workerStats.minDiff;
           const shares = workerStats.varDiffSharesFound;

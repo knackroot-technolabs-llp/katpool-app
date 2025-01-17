@@ -317,9 +317,17 @@ export class SharesManager {
             continue;
           }
 
+          // if (workerStats.asicType == AsicType.Bitmain) {
+          //   expectedShareRate = 20
+          // } else if (workerStats.asicType == AsicType.IceRiver) {
+          //   expectedShareRate = 10
+          // } else if (workerStats.asicType == AsicType.GoldShell) {
+          //   expectedShareRate = 15
+          // }
+
           const diff = workerStats.minDiff;
           const shares = workerStats.varDiffSharesFound;
-          const duration = Math.max((Date.now() - workerStats.varDiffStartTime) / 60000, 1); // Prevent very small values
+          const duration = (Date.now() - workerStats.varDiffStartTime) / 60000
           const shareRate = shares / duration;
           const shareRateRatio = shareRate / expectedShareRate;
           const windowIndex = workerStats.varDiffWindow % windows.length;
@@ -341,7 +349,7 @@ export class SharesManager {
 
           // check all previously cleared windows
           let i: number = 1;
-          for (; i < workerStats.varDiffWindow;) {
+          for (; i <= windowIndex;) {
             if (Math.abs(1 - shareRateRatio) >= tolerances[i]) {
               // breached tolerance of previously cleared window
               toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded tolerance (+/- ${tolerances[i] * 100}%) for ${windows[i]}m window`);
@@ -357,7 +365,7 @@ export class SharesManager {
 
           // check for current window max exception
           if (shares >= window * expectedShareRate * (1 + tolerance)) {
-            toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerances[workerStats.varDiffWindow] * 100}%) for ${windows[workerStats.varDiffWindow]}m window`);
+            toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded upper tolerance (+/- ${tolerance * 100}%) for ${window}m window`);
             this.updateVarDiff(workerStats, diff * shareRateRatio, clamp);
             continue;
           }
@@ -366,7 +374,7 @@ export class SharesManager {
           if (duration >= window) {
             // check for current window min exception
             if (shares <= window * expectedShareRate * (1 - tolerance)) {
-              toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerances[workerStats.varDiffWindow] * 100}%) for ${windows[workerStats.varDiffWindow]}m window`);
+              toleranceErrs.push(`${workerName} share rate ${shareRate} exceeded lower tolerance (+/- ${tolerance * 100}%) for ${window}m window`);
               this.updateVarDiff(workerStats, diff * Math.max(shareRateRatio, 0.1), clamp);
             } else {
               workerStats.varDiffWindow++;
@@ -403,25 +411,36 @@ export class SharesManager {
   // client handler restarts it while sending diff on next block
   updateVarDiff(stats : WorkerStats, minDiff: number, clamp: boolean): number {
     if (clamp) {
-      minDiff = Math.pow(2, Math.ceil(Math.log2(minDiff)))
+      minDiff = Math.pow(2, Math.floor(Math.log2(minDiff)))
     }
 
     let previousMinDiff = stats.minDiff
     let minimumDiff = config.stratum.minDiff
 
-    if (stats.asicType === AsicType.Bitmain || stats.asicType === AsicType.GoldShell) {
-      minimumDiff = 512
-    }
-
     let newMinDiff = Math.max(minimumDiff, Math.min(config.stratum.maxDiff, minDiff))
     if (stats.sharesFound < stats.invalidShares) {
-      if (stats.asicType == AsicType.Bitmain) {
-        newMinDiff = 16384
-      } else if (stats.asicType == AsicType.IceRiver) {
-        newMinDiff = 512
-      } else if (stats.asicType == AsicType.GoldShell) {
-        newMinDiff = 2048
-      } 
+      const OneGH = Math.pow(10, 9); 
+      if (stats.hashrate <= OneGH * 100) {
+        newMinDiff = 64 // Iceriver KS0
+      } else if (stats.hashrate >= OneGH * 101 && stats.hashrate <= OneGH * 200) {
+        newMinDiff = 128 // Iceriver KS0 Pro
+      } else if (stats.hashrate >= OneGH * 200 && stats.hashrate <= OneGH * 400) {
+        newMinDiff = 256 // Iceriver KS0 Ultra
+      } else if (stats.hashrate >= OneGH * 401 && stats.hashrate <= OneGH * 1000) {
+        newMinDiff = 512 // Iceriver KS1
+      } else if (stats.hashrate >= OneGH * 1001 && stats.hashrate <= OneGH * 2000) {
+        newMinDiff = 1024 // Iceriver KS2 | Iceriver KS2 Lite | Goldshell KA-BOX | Goldshell KA-BOX Pro
+      } else if (stats.hashrate >= OneGH * 2001 && stats.hashrate <= OneGH * 5000) {
+        newMinDiff = 2048 // Iceriver KS3L/M
+      } else if (stats.hashrate >= OneGH * 5001 && stats.hashrate <= OneGH * 8000) {
+        newMinDiff = 4096 // Iceriver KS3 | Goldshell E-KA1M
+      } else if (stats.hashrate >= OneGH * 8001 && stats.hashrate <= OneGH * 12000) {
+        newMinDiff = 8192 // Iceriver KS5L | Bitmain KS3
+      } else if (stats.hashrate >= OneGH * 12001 && stats.hashrate <= OneGH * 15000) {
+        newMinDiff = 16384 // Iceriver KS5M
+      } else if (stats.hashrate >= OneGH * 15001 && stats.hashrate <= OneGH * 21000) {
+        newMinDiff = 32768 // Bitmain KS5/Pro
+      }
     }
 
     if (newMinDiff != previousMinDiff) {

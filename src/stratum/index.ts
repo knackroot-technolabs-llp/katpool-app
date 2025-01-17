@@ -156,21 +156,9 @@ export default class Stratum extends EventEmitter {
         case 'mining.authorize': {
           const [address, name] = request.params[0].split('.');
           if (!Address.validate(address)) throw Error('Invalid address');
+          if (!name) throw Error('Worker name is not set.');
 
-          let newName = name || `defaultworker${address.slice(-4)}`;
-
-          if (!name) {
-            // Get the current counter for the address or initialize it to 0
-            const currentCount = workerCounters.get(address) || 0;
-
-            // Generate the new name with the incremented counter
-            newName = `defaultworker${address.slice(-4)}${currentCount + 1}`;
-
-            // Update the counter for the address
-            workerCounters.set(address, currentCount + 1);
-          }
-
-          const worker: Worker = { address, name: newName };
+          const worker: Worker = { address, name: name };
           if (socket.data.workers.has(worker.name)) throw Error('Worker with duplicate name');
           const sockets = this.sharesManager.getMiners().get(worker.address)?.sockets || new Set();
           socket.data.workers.set(worker.name, worker);

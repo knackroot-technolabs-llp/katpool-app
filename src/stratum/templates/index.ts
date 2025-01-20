@@ -6,6 +6,7 @@ import Monitoring from '../../monitoring'
 import { DEBUG } from '../../../index'
 import { metrics } from '../../../index';   
 import JsonBig from 'json-bigint';
+import Database from '../../pool/database';
 import redis, { type RedisClientType } from 'redis';
 import config from '../../../config/config.json';
 
@@ -46,7 +47,7 @@ export default class Templates {
     return this.templates.get(hash)?.[1]
   }
 
-  async submit (minerId: string, hash: string, nonce: bigint) {
+  async submit (minerId: string, miner_address: string, hash: string, nonce: bigint) {
     const template = this.templates.get(hash)![0]
     const header = new Header(template.header)
 
@@ -64,7 +65,10 @@ export default class Templates {
     
     if (report.report.type === "success") {
       metrics.updateGaugeInc(paidBlocksGauge, [minerId, this.address]);
-      metrics.updateGaugeValue(successBlocksDetailsGauge, [minerId, this.address, newHash, template.header.daaScore.toString()], Date.now());
+
+      const database = new Database(process.env.DATABASE_URL || '');
+      await database.addBlockDetails(newHash, minerId, this.address, miner_address, template.header.daaScore.toString()); 
+      
       if (DEBUG) this.monitoring.debug(`Templates: the block by miner ${minerId} has been accepted with hash : ${newHash}`)
     } else { // Failed
       if (DEBUG) this.monitoring.debug(`Templates: the block by ${minerId} has been rejected, reason: ${report.report.reason}`)

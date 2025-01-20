@@ -149,7 +149,7 @@ export class SharesManager {
     if (isBlock) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
       metrics.updateGaugeInc(minerIsBlockShare, [minerId, address]);
-      const report = await templates.submit(minerId, hash, nonce);
+      const report = await templates.submit(minerId, address, hash, nonce);
       if (report === "success") workerStats.blocksFound++;
     }
 

@@ -12,6 +12,27 @@ services:
       - .env
     restart: always
 
+  postgres-migrate:
+    image: postgres
+    container_name: katpool-db-migrate
+    networks:
+      - backend
+    depends_on:
+      - postgres
+    volumes:
+      - ./migration.sql:/migration.sql
+    env_file:
+      - .env
+    entrypoint: >
+      sh -c "
+      until pg_isready -U $POSTGRES_USER -h postgres; do
+        echo 'Waiting for Postgres to be ready...';
+        sleep 2;
+      done;
+      export PGPASSWORD=$POSTGRES_PASSWORD;
+      psql -U $POSTGRES_USER -h postgres -d $POSTGRES_DB -f /migration.sql;
+      "
+
   # Redis service
   redis:
     image: redis:latest

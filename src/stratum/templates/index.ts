@@ -65,6 +65,7 @@ export default class Templates {
     
     if (report.report.type === "success") {
       metrics.updateGaugeInc(paidBlocksGauge, [minerId, this.address]);
+      metrics.updateGaugeValue(successBlocksDetailsGauge, [minerId, this.address, newHash, template.header.daaScore.toString()], Date.now());
 
       const database = new Database(process.env.DATABASE_URL || '');
       await database.addBlockDetails(newHash, minerId, this.address, miner_address, template.header.daaScore.toString()); 

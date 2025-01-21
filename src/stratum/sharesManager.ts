@@ -49,6 +49,7 @@ type MinerData = {
 };
 
 const varDiffThreadSleep: number = 10
+const varDiffRejectionRateThreshold: number = 20 // If rejection rate exceeds threshold, set difficulty based on hash rate.
 const zeroDateMillS: number = new Date(0).getMilliseconds()
 
 type Contribution = {
@@ -149,7 +150,7 @@ export class SharesManager {
     if (isBlock) {
       if (DEBUG) this.monitoring.debug(`SharesManager: Work found for ${minerId} and target: ${target}`);
       metrics.updateGaugeInc(minerIsBlockShare, [minerId, address]);
-      const report = await templates.submit(minerId, hash, nonce);
+      const report = await templates.submit(minerId, address, hash, nonce);
       if (report === "success") workerStats.blocksFound++;
     }
 
@@ -418,7 +419,7 @@ export class SharesManager {
     let minimumDiff = config.stratum.minDiff
 
     let newMinDiff = Math.max(minimumDiff, Math.min(config.stratum.maxDiff, minDiff))
-    if (stats.sharesFound < stats.invalidShares) {
+    if (stats.invalidShares / stats.sharesFound >= varDiffRejectionRateThreshold / 100) {
       const OneGH = Math.pow(10, 9); 
       if (stats.hashrate <= OneGH * 100) {
         newMinDiff = 64 // Iceriver KS0

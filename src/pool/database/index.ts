@@ -99,6 +99,31 @@ export default class Database {
     }
   }
 
+  async addBlockDetails(block_hash: string, minerId: string, pool_address: string, wallet: string, daa_score: string) {
+    const client = await this.pool.connect();
+    const key = `${block_hash}`;
+
+    try {
+      await client.query('BEGIN');
+      
+      await client.query('INSERT INTO block_details (block_hash, miner_id, pool_address, wallet, daa_score, timestamp) VALUES ($1, $2, $3, $4, $5, NOW())', [
+        key,
+        minerId,
+        pool_address,
+        wallet,
+        daa_score,
+      ]);
+
+      await client.query('COMMIT');
+      return true;
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {      
+      client.release();
+    }
+  }
+
   async getPaymentsByWallet(wallet: string) {
     const client = await this.pool.connect();
     try {

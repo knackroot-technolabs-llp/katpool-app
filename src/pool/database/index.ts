@@ -106,7 +106,7 @@ export default class Database {
     try {
       await client.query('BEGIN');
       
-      await client.query('INSERT INTO block_details (mined_block_hash, miner_id, pool_address, reward_block_hash, wallet, daa_score, miner_reward, timestamp) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) ON CONFLICT (mined_block_hash) DO UPDATE SET reward_block_hash = EXCLUDED.reward_block_hash', [
+      await client.query('INSERT INTO block_details (mined_block_hash, miner_id, pool_address, reward_block_hash, wallet, daa_score, miner_reward, timestamp) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) ON CONFLICT (mined_block_hash) DO UPDATE SET reward_block_hash = EXCLUDED.reward_block_hash, miner_reward = EXCLUDED.miner_reward', [
         key,
         miner_id,
         pool_address,

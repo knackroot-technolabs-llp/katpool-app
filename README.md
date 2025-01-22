@@ -49,6 +49,7 @@ For now, all the instances share the same env var. However, in the future, it's 
 Create `postgres_data` folder at the repository root location for the postgres data files, and make that info persistant between restarts, and ensure the following files are present:
 * prometheus.yml: prometheus scrape configuration
 * init.sql: to setup the database the first time it's started
+* migrate.sql: to make changes to current database. Add new table, update existing table. NOTE: Overwrite the content of this file for performing latest changes.
 * nginx.conf
 * config 
 * **wasm** folder must the also available. Check download link above

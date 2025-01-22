@@ -1,8 +1,3 @@
-CREATE TABLE IF NOT EXISTS block_details (
-    block_hash VARCHAR(255) PRIMARY KEY,
-    miner_id VARCHAR(255), 
-    pool_address VARCHAR(255), 
-    wallet VARCHAR(255),
-    daa_score VARCHAR(255),
-    timestamp TIMESTAMP DEFAULT NOW()
-);
+ALTER TABLE block_details RENAME COLUMN block_hash TO mined_block_hash;
+ALTER TABLE block_details ADD reward_block_hash VARCHAR(255) DEFAULT '';
+ALTER TABLE block_details ADD miner_reward BIGINT NOT NULL DEFAULT 0;

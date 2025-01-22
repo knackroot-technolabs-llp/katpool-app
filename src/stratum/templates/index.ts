@@ -68,7 +68,8 @@ export default class Templates {
       metrics.updateGaugeValue(successBlocksDetailsGauge, [minerId, this.address, newHash, template.header.daaScore.toString()], Date.now());
 
       const database = new Database(process.env.DATABASE_URL || '');
-      await database.addBlockDetails(newHash, minerId, this.address, miner_address, template.header.daaScore.toString()); 
+      // The reward_block_hash and miner_reward will be updated on maturity coinbase event in pool.allocate().
+      await database.addBlockDetails(newHash ,minerId, '', miner_address, template.header.daaScore.toString(), this.address, 0n); 
       
       if (DEBUG) this.monitoring.debug(`Templates: the block by miner ${minerId} has been accepted with hash : ${newHash}`)
     } else { // Failed

@@ -99,19 +99,21 @@ export default class Database {
     }
   }
 
-  async addBlockDetails(block_hash: string, minerId: string, pool_address: string, wallet: string, daa_score: string) {
+  async addBlockDetails(mined_block_hash: string, miner_id: string, reward_block_hash: string, wallet: string, daaScore: string, pool_address: string, minerReward : bigint) {
     const client = await this.pool.connect();
-    const key = `${block_hash}`;
+    const key = `${mined_block_hash}`;
 
     try {
       await client.query('BEGIN');
       
-      await client.query('INSERT INTO block_details (block_hash, miner_id, pool_address, wallet, daa_score, timestamp) VALUES ($1, $2, $3, $4, $5, NOW())', [
+      await client.query('INSERT INTO block_details (mined_block_hash, miner_id, pool_address, reward_block_hash, wallet, daa_score, miner_reward, timestamp) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) ON CONFLICT (mined_block_hash) DO UPDATE SET reward_block_hash = EXCLUDED.reward_block_hash', [
         key,
-        minerId,
+        miner_id,
         pool_address,
+        reward_block_hash,
         wallet,
-        daa_score,
+        daaScore,
+        minerReward,        
       ]);
 
       await client.query('COMMIT');

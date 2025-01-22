@@ -1,50 +1,90 @@
-import { createReadStream, access, constants } from 'fs';
-import path from 'path';
-import { google } from 'googleapis';
-import config from '../config/config.json'
-import googleCredentials from './google-credentials.json';
+import { exec } from "child_process";
+import { google } from "googleapis";
+import cron from 'node-cron'; // Import node-cron
+import config from "../config/config.json";
+import googleCredentials from "./google-credentials.json";
 
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
-const fileNameArgs = process.argv.slice(2); 
+const payoutsPerDay = config.payoutsPerDay || 2; // Default to twice a day if not set
+const paymentInterval = 24 / payoutsPerDay;
+if (paymentInterval < 1 || paymentInterval > 24) {
+  throw new Error('paymentInterval must be between 1 and 24 hours.');
+}
+
+const backupScriptPath = "backup.sh";
 
 async function authorize() {
+    const formattedPrivateKey = googleCredentials.private_key.replace(/\\n/g, "\n");
     const jwtClient = new google.auth.JWT(
         googleCredentials.client_email,
         undefined,
-        googleCredentials.private_key,
+        formattedPrivateKey,
         SCOPES
     );
     await jwtClient.authorize();
     return jwtClient;
 }
 
-async function uploadFile(authClient: any) {
+async function uploadFile(authClient: any, fileName: string) {
     const drive = google.drive({ version: "v3", auth: authClient });
-
-    for(let i = 0; i < fileNameArgs.length; i++) {
-        access(fileNameArgs[i], constants.F_OK, async (err) => {
-            if (err) {
-                console.log(`The file ${fileNameArgs[i]} does not exist in the current directory.`);
-            } else {
-                const file = await drive.files.create({
-                    media: {
-                        body: createReadStream(fileNameArgs[i]),
-                    },
-                    fields: "id",
-                    requestBody: {
-                        name: path.basename(fileNameArgs[i]),
-                    },
-                });
-                console.log("File Uploaded :", file.data.id);
-                const backupEmailAddress = config.backupEmailAddress
-                await drive.permissions.create({ fileId: file.data.id!, requestBody: { type: 'user', role: 'writer', emailAddress: backupEmailAddress } })
-            }
+    const backupEmailAddress = config.backupEmailAddress || "socials@onargon.com";
+    try {
+        const file = await drive.files.create({
+            media: { body: require("fs").createReadStream(fileName) },
+            fields: "id",
+            requestBody: { name: fileName.split("/").pop() },
         });
+        console.log("File Uploaded:", file.data.id);
+
+        await drive.permissions.create({
+            fileId: file.data.id!,
+            requestBody: {
+                type: "user",
+                role: "writer",
+                emailAddress: backupEmailAddress,
+            },
+        });
+        console.log(`Permission granted to: ${backupEmailAddress}`);
+    } catch (err) {
+        console.error(`Error uploading file ${fileName}:`, err.message);
     }
 }
 
-(async function main() {
-    const authClient = await authorize();
-    await uploadFile(authClient);
-})()
+async function runBackupAndUpload() {
+    console.log(`[${new Date().toISOString()}] Starting backup...`);
 
+    exec(`bash ${backupScriptPath}`, async (error, stdout, stderr) => {
+        if (error) {
+            console.error(`Backup script error: ${stderr}`);
+            return;
+        }
+
+        const output = stdout.trim();
+        console.log("Backup script output:", output);
+
+        // Extract the backup filename from the output
+        const match = output.match(/Backup completed: (.+\.gz)/);
+        if (match && match[1]) {
+            const backupFile = match[1];
+            console.log(`Backup file identified: ${backupFile}`);
+
+            const authClient = await authorize();
+            await uploadFile(authClient, backupFile);
+        } else {
+            console.error("Backup file not identified in the script output.");
+        }
+    });
+}
+
+// Schedule the job based on the interval
+cron.schedule(`0 */${paymentInterval} * * *`, async () => {
+    console.log(`Scheduled backup and upload started at ${new Date().toISOString()}`);
+
+    const delay = (10 * 60 * 1000); // Convert to milliseconds
+
+    // Wait for the delay before executing the backup and upload
+    setTimeout(async () => {
+        console.log(`Running backup and upload after delay at ${new Date().toISOString()}`);
+        await runBackupAndUpload();
+    }, delay);
+});

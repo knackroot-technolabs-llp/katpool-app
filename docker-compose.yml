@@ -194,6 +194,7 @@ services:
       - .env
     volumes:
       - /root/docker_deployment/backup/files:/backup/files
+      - ./config:/config
     networks:
       - backend
     restart: always

@@ -1,0 +1,16 @@
+{
+    "name": "cloud-backup",
+    "version": "1.0.0",
+    "description": "A cloud backup utility",
+    "main": "cloudBackup.ts",
+    "scripts": {
+      "start": "bun run cloudBackup.ts"
+    },
+    "dependencies": {
+      "googleapis": "^105.0.0", 
+      "node-cron": "^3.0.0" 
+    },
+    "devDependencies": {},
+    "type": "module"
+  }
+  

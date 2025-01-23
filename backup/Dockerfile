@@ -18,7 +18,6 @@ RUN mkdir -p /backup /app
 # Copy the backup script into the container
 COPY backup.sh /app/backup.sh
 COPY cloudBackup.ts /app/cloudBackup.ts
-COPY google-credentials.json /app/google-credentials.json
 
 # Give execution rights on the backup script
 RUN chmod +x /app/backup.sh

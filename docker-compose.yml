@@ -195,6 +195,7 @@ services:
     volumes:
       - /root/docker_deployment/backup/files:/backup/files
       - ./config:/config
+      - ./backup/google-credentials.json:/app/google-credentials.json
     networks:
       - backend
     restart: always

@@ -109,7 +109,7 @@ export class SharesManager {
       console.log('Duplicate share for miner : ', minerId);
       return;
     } else {
-      this.contributions.set(nonce, { address, difficulty, timestamp: Date.now(), minerId });
+      // this.contributions.set(nonce, { address, difficulty, timestamp: Date.now(), minerId });
     }
 
     const timestamp = Date.now();

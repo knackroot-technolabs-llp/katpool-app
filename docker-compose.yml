@@ -161,6 +161,7 @@ services:
       - backend
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=12w' # Retain data for 12 week = 3 months
     restart: always
 
   pushgateway:

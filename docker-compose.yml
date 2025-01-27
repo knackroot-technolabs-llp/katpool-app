@@ -11,6 +11,10 @@ services:
     env_file:
       - .env
     restart: always
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   postgres-migrate:
     image: postgres
@@ -23,6 +27,10 @@ services:
       - ./migration.sql:/migration.sql
     env_file:
       - .env
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"    
     entrypoint: >
       sh -c "
       until pg_isready -U $POSTGRES_USER -h postgres; do
@@ -39,6 +47,10 @@ services:
     container_name: redis
     networks:
       - backend
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   kaspad:
     container_name: kaspad
@@ -54,6 +66,10 @@ services:
     networks:
       - backend
     command: kaspad --yes --nologfiles --disable-upnp --utxoindex --rpclisten=0.0.0.0:16110 --rpclisten-borsh=0.0.0.0:17110 --rpclisten-json=0.0.0.0:18110
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   # kaspad: # REGULAR TESTNET
   #   container_name: kaspad
@@ -69,6 +85,10 @@ services:
   #   networks:
   #     - backend
   #   command: kaspad --yes --nologfiles --disable-upnp --utxoindex --testnet --rpclisten=0.0.0.0:16210 --rpclisten-borsh=0.0.0.0:17210 --rpclisten-json=0.0.0.0:18210
+  #   logging:
+  #     driver: journald
+  #     options:
+  #     tag: "{{.Name}}"
 
   # kaspad: # 10BPS TESTNET
   #   container_name: kaspad
@@ -84,6 +104,10 @@ services:
   #   networks:
   #     - backend
   #   command: kaspad --yes --nologfiles --disable-upnp --utxoindex --testnet --netsuffix=11 --rpclisten=0.0.0.0:16310 --rpclisten-borsh=0.0.0.0:17310 --rpclisten-json=0.0.0.0:18310
+  #   logging:
+  #     driver: journald
+  #     options:
+  #     tag: "{{.Name}}"
 
   go-app:
     image: ghcr.io/argonmining/katpool-blocktemplate-fetcher:beta-v1.0.2-main  # Build the Go app from the ./app directory
@@ -99,6 +123,10 @@ services:
     networks:
       - backend
     restart: always
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   katpool-app:
     image: ghcr.io/argonmining/katpool-app:beta-v1.0.2-main
@@ -118,6 +146,10 @@ services:
     env_file:
       - .env
     restart: always
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   katpool-monitor:
     image: ghcr.io/argonmining/katpool-monitor:beta-v1.0.2-main
@@ -133,6 +165,10 @@ services:
       - "9301:9301"
       - "9300:9300"
     restart: always
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   katpool-payment:
     image: ghcr.io/argonmining/katpool-payment:beta-v1.0.2-main
@@ -147,6 +183,10 @@ services:
     env_file:
       - .env
     restart: always
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   # https://prometheus.io/docs/prometheus/latest/storage/#operational-aspects
   prometheus:
@@ -165,6 +205,10 @@ services:
       - '--storage.tsdb.retention.time=12w' # Retain data for 12 week = 3 months
       # Retention time defaults to 15d. Supported units: y, w, d, h, m, s, ms.
     restart: always
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   pushgateway:
     image: prom/pushgateway
@@ -172,6 +216,10 @@ services:
     networks:
       - backend
     restart: always
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   nginx:
     container_name: katpool-nginx
@@ -187,6 +235,10 @@ services:
       - prometheus
       - katpool-monitor
     restart: always
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
   katpool-backup:
     image: ghcr.io/argonmining/katpool-app-db-backup:beta-v1.0.2-main
@@ -202,6 +254,10 @@ services:
     networks:
       - backend
     restart: always
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
 
 networks:
   backend:

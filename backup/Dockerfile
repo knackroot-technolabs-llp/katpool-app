@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM ubuntu:24.04
 
 # Use an official PostgreSQL image as the base
 FROM postgres:latest
@@ -10,10 +10,13 @@ RUN apt-get update && apt-get install -y cron curl unzip
 FROM node:20
 
 # Install Bun
-RUN curl -fsSL https://bun.sh/install | bash
+RUN curl -fsSL https://bun.sh/install | bash && echo $(date +%s)
+
+# Set /app as the working directory for your application
+WORKDIR /app
 
 # Create a directory for the backup scripts and files
-RUN mkdir -p /backup /app
+RUN mkdir -p /backup
 
 # Copy the backup script into the container
 COPY backup.sh /app/backup.sh
@@ -29,11 +32,10 @@ ENV PATH="/root/.bun/bin:$PATH"
 COPY package.json /app/
 
 # Install dependencies
-WORKDIR /app
-RUN bun install --cwd /app
+RUN bun install
 RUN bun upgrade --canary
 
-# Create a crontab file
+# Create a crontab entry for backups
 RUN echo "0 * * * * /app/backup.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/backup-cron
 
 # Install cron in the final image so crontab works

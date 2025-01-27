@@ -16,7 +16,8 @@ PGPASSWORD=$POSTGRES_PASSWORD pg_dumpall -h $POSTGRES_HOSTNAME -U $POSTGRES_USER
 
 if [ $? -eq 0 ]; then
     # Print a message
-    echo "Backup completed: $BACKUP_FILE"
+    echo "[$(date)] Backup completed: $BACKUP_FILE"
 else
     echo "[$(date)] Backup failed. Check the PostgreSQL server or connection settings."
+    exit 1
 fi

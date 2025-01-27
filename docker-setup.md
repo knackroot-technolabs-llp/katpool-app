@@ -168,6 +168,57 @@ docker rmi <image-id>
 
 ---
 
+## Logging
+
+### Journald Logging Driver
+
+The `journald` driver sends logs to the systemd journal, which is managed by your host machine's system. This ensures that logs are accessible even after the container is stopped or removed. However, it's very important to manage the size of your journal logs to avoid the potential issue of log files growing too large over time, which could fill up disk space and affect system performance.
+
+To ensure proper log management, you must make changes to the `journald` settings in your system's configuration file.
+
+### Modifying `journald.conf`
+
+To make sure your logs do not grow **uncontrollably**, update the `journald` configuration by editing the `journald.conf` file. This is a **crucial step**, as logs can quickly become very large if not limited. Failure to manage log size might cause problems with disk space, as the logs continue to grow without restrictions.
+
+1. Open the `journald.conf` file for editing:
+    ```bash
+    sudo nano /etc/systemd/journald.conf
+    ```
+
+2. Add or modify the following settings to ensure that the journal logs are controlled:
+    ```ini
+    [Journal]
+    Storage=persistent
+    SystemMaxFileSize=1000M  # Maximum size of individual journal files
+    SystemMaxFiles=20    # Number of archived journal files to keep
+    ```
+
+3. Save and exit the editor.
+
+### Apply Changes
+
+To apply the changes made to `journald.conf`, reload and restart the `systemd-journald` service:
+
+```bash
+sudo systemctl restart systemd-journald
+```
+
+### Various commands to view logs
+
+```bash
+journalctl CONTAINER_NAME=<service-name>
+
+journalctl CONTAINER_NAME=<service-name> -f 
+
+journalctl -u docker -f
+
+journalctl -u <service-name> --since "2025-01-01" --until "2025-01-02"
+
+journalctl -u <service-name> -n 100
+```
+
+---
+
 ## Additional Resources
 
 - [Docker Documentation](https://docs.docker.com/)

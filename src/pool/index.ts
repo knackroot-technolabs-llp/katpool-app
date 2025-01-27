@@ -200,7 +200,7 @@ export default class Pool {
               daaScoreF = response.data.header.daaScore
               break    
             } else {
-              this.monitoring.error("Error Fetching block hash for transaction ${txnId}")
+              this.monitoring.error(`Error Fetching block hash for transaction ${txnId}`)
             }
           } catch (error) {
               this.handleError(error, `Fetching block hash for transaction ${txnId}`);

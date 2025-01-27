@@ -3,16 +3,19 @@ import { google } from "googleapis";
 import cron from 'node-cron'; // Import node-cron
 import config from "../config/config.json";
 import googleCredentials from "./google-credentials.json";
+import path from "path";
 
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
+const backupScriptPath = path.resolve(__dirname, "backup.sh");
 const payoutsPerDay = config.payoutsPerDay || 2; // Default to twice a day if not set
 const paymentInterval = 24 / payoutsPerDay;
 if (paymentInterval < 1 || paymentInterval > 24) {
   throw new Error('paymentInterval must be between 1 and 24 hours.');
 }
 
-const backupScriptPath = "backup.sh";
+const backupEmailAddress = config.backupEmailAddress || "socials@onargon.com";
 
+// Google Drive API authorization
 async function authorize() {
     const formattedPrivateKey = googleCredentials.private_key.replace(/\\n/g, "\n");
     const jwtClient = new google.auth.JWT(
@@ -25,9 +28,9 @@ async function authorize() {
     return jwtClient;
 }
 
+// Upload file to Google Drive
 async function uploadFile(authClient: any, fileName: string) {
     const drive = google.drive({ version: "v3", auth: authClient });
-    const backupEmailAddress = config.backupEmailAddress || "socials@onargon.com";
     try {
         const file = await drive.files.create({
             media: { body: require("fs").createReadStream(fileName) },
@@ -50,6 +53,7 @@ async function uploadFile(authClient: any, fileName: string) {
     }
 }
 
+// Run backup and upload process
 async function runBackupAndUpload() {
     console.log(`[${new Date().toISOString()}] Starting backup...`);
 

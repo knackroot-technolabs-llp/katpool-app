@@ -64,7 +64,7 @@ RUN ./build-node
 FROM node:20
 
 # Install Bun
-RUN curl -fsSL https://bun.sh/install | bash
+RUN curl -fsSL https://bun.sh/install | bash && echo $(date +%s)
 
 # Set the working directory in the container
 WORKDIR /app

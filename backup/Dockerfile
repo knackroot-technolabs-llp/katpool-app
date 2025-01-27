@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y cron curl unzip
 FROM node:20
 
 # Install Bun
-RUN curl -fsSL https://bun.sh/install | bash
+RUN curl -fsSL https://bun.sh/install | bash && echo $(date +%s)
 
 # Create a directory for the backup scripts and files
 RUN mkdir -p /backup /app
